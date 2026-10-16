@@ -1,0 +1,14 @@
+{
+  "name": "skyfront-multiplayer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter Node.js and Socket.IO server for Skyfront",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
