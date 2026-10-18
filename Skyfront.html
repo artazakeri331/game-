@@ -1,0 +1,2205 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Skyfront</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+<style>
+/* Layout: the map fills the screen; every control floats over it as a slim overlay so the battlefield stays visible.
+   Single deliberate look (dark command table), so every color is an explicit token. */
+:root{
+  --bg:#0b1722; --panel:#10212f; --panel2:#17303f; --line:#27485c; --scrim:rgba(8,18,27,.88); --scrim2:rgba(8,18,27,.62);
+  --ink:#e8eff3; --muted:#8fa8b6; --blue:#4aa8ff; --red:#ff5a4d; --amber:#f2b84b; --ok:#6fd49a;
+  --f-display:'Saira Stencil One','Arial Narrow',Impact,sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);display:flex;flex-direction:column;
+  padding-block:10px 12px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.app{flex:1;min-height:520px;display:flex;flex-direction:column;gap:8px}
+.top{flex:none;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+h1{margin:0;font:400 26px/1 var(--f-display);letter-spacing:.07em;text-transform:uppercase}
+.hud{flex:1 1 240px;display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.chip{font:500 12px var(--f-mono);border:1px solid var(--line);background:var(--panel);padding:3px 8px;white-space:nowrap}
+.chip b{font-weight:500;color:var(--amber)}
+.chip.blue b{color:var(--blue)}
+.ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ctl label{font:500 12px var(--f-mono);color:var(--muted);display:flex;gap:5px;align-items:center}
+select{font:500 12px var(--f-mono);background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:5px 6px;border-radius:3px}
+.btn{font:600 13px var(--f-body);background:var(--panel2);color:var(--ink);border:1px solid var(--line);padding:7px 11px;cursor:pointer;border-radius:3px}
+.btn:hover:not(:disabled){border-color:var(--blue)}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn.pri{background:var(--blue);color:#04203a;border-color:var(--blue)}
+.btn.sm{padding:4px 9px;font-size:12px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+kbd{font:500 10px var(--f-mono);border:1px solid currentColor;padding:0 4px;margin-left:6px;opacity:.7;border-radius:2px}
+.stage{position:relative;flex:1;min-height:0;border:1px solid var(--line);background:#1c3f5c;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#cv.grab{cursor:grabbing}
+#mini{width:100%;aspect-ratio:5/2;display:block;border:1px solid var(--line);background:#1c3f5c;cursor:pointer;touch-action:none}
+.hudlog{position:absolute;left:10px;top:10px;max-width:min(380px,calc(100% - 20px));pointer-events:none;display:grid;gap:3px;margin:0;padding:0;list-style:none;font:500 12px/1.35 var(--f-mono)}
+.stage.st-open .hudlog{max-width:calc(100% - 236px)}
+.hudlog li{background:var(--scrim2);padding:3px 8px;border-left:3px solid var(--muted)}
+.hudlog li.me{border-left-color:var(--blue)}.hudlog li.hit{border-left-color:var(--red);color:#ffd9d4}.hudlog li.good{border-left-color:var(--ok)}
+.hudlog li:nth-child(n+4){opacity:.55}
+.rightcol{position:absolute;right:10px;top:10px;width:214px;display:grid;gap:8px;align-content:start}
+.standings-ov{background:var(--scrim);border:1px solid var(--line);padding:6px 8px}
+.standings-ov .sh{display:flex;justify-content:space-between;align-items:center;font:500 11px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.standings-ov .sh button{font:500 11px var(--f-mono);background:none;color:var(--muted);border:1px solid var(--line);cursor:pointer;padding:1px 6px;border-radius:2px}
+.standings{display:flex;flex-direction:column;gap:3px;margin-top:6px;max-height:calc(100vh - 430px);min-height:90px;overflow-y:auto;padding-right:2px}
+.nrow[hidden]{display:none}
+.dipnews{display:grid;gap:3px;font:500 11.5px var(--f-mono);color:var(--muted)}
+.dipnews:empty{display:none}
+.dintel{font:500 11.5px var(--f-mono);color:var(--blue)}
+.dintel[hidden]{display:none}
+.warprompt{top:auto;bottom:178px;border-color:var(--red);z-index:6}
+.warprompt[hidden]{display:none}
+.warprompt .evopts{grid-template-columns:1fr 1fr 1fr}
+.warprompt .evopts #wpGo{grid-column:1/-1;border-color:var(--red);color:var(--red)}
+.drow.flash{outline:2px solid var(--amber);outline-offset:-2px}
+.dipnews span::before{content:'\25B8  ';color:var(--amber)}
+.drow .dwhy{font:500 11.5px var(--f-mono);color:var(--amber)}
+.standings[hidden]{display:none}
+.nrow{display:grid;grid-template-columns:10px 1fr auto auto;gap:7px;align-items:center;font:500 11px var(--f-mono)}
+.nrow i{width:10px;height:10px;display:block}
+.nrow .nm{font-family:var(--f-body);font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nrow .pc{color:var(--amber)}.nrow .tr{color:var(--muted)}
+.nrow.dead{opacity:.4;text-decoration:line-through}
+.nrow.me .nm{color:var(--blue)}
+.zoom{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:grid;gap:4px}
+.zoom button{width:34px;height:34px;padding:0;font:600 16px var(--f-mono)}
+.dock{position:absolute;left:10px;right:10px;bottom:10px;background:var(--scrim);border:1px solid var(--line);padding:8px 10px;display:grid;gap:6px;max-height:46%}
+.spawnbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:space-between}
+.spawnbar b{font:400 17px var(--f-display);letter-spacing:.06em;text-transform:uppercase}
+.spawnbar[hidden],#dockMain[hidden],.pane[hidden],.overlay[hidden]{display:none}
+.dockhead{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.statusline{font:500 12px var(--f-mono);color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.statusline .hint{color:var(--ink)}.statusline .warn{color:var(--amber)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button{font:600 12px var(--f-body);letter-spacing:.06em;text-transform:uppercase;background:transparent;color:var(--muted);border:1px solid var(--line);padding:6px 12px;cursor:pointer;border-radius:3px}
+.tabs button[aria-pressed="true"]{background:var(--panel2);color:var(--ink);border-color:var(--blue)}
+.panes{overflow-y:auto;min-height:0}
+.pane{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+.item{display:grid;grid-template-columns:1fr auto;gap:0 8px;align-items:center;text-align:left;background:var(--panel2);color:var(--ink);border:1px solid var(--line);padding:6px 9px;cursor:pointer;border-radius:3px;font:inherit;min-width:128px}
+.item:hover:not(:disabled){border-color:var(--blue)}
+.item:disabled{opacity:.42;cursor:not-allowed}
+.item.on{border-color:var(--amber);background:#2a2610}
+.item .bn{font-size:13px;font-weight:600}
+.item .cost{font:500 12px var(--f-mono);color:var(--amber)}
+.item .st{grid-column:1/3;font:400 10.5px var(--f-mono);color:var(--muted);margin-top:2px}
+.attackpane{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;width:100%}
+.ratio{display:grid;gap:3px;font:500 12px var(--f-mono);color:var(--muted);flex:1 1 220px;max-width:340px}
+.ratio span{display:flex;justify-content:space-between}.ratio b{color:var(--ink);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--blue)}
+.attackinfo{font:400 12px var(--f-mono);color:var(--muted);flex:1 1 200px;display:grid;gap:2px}
+.attackinfo b{color:var(--ink);font-weight:500}
+.overlay{position:absolute;inset:0;background:var(--scrim);display:grid;place-items:center;padding:16px}
+.result{background:var(--panel);border:1px solid var(--blue);padding:18px 20px;max-width:380px;width:100%}
+.result h2{margin:0 0 2px;font:400 28px var(--f-display);letter-spacing:.06em;text-transform:uppercase}
+.result h2.lose{color:var(--red)}.result h2.win{color:var(--blue)}
+.result p{margin:4px 0 12px;color:var(--muted)}
+.helpcard ul{margin:8px 0 12px;padding-left:18px;display:grid;gap:5px;font-size:13px;color:var(--ink)}
+.helpcard{max-height:100%;overflow-y:auto}
+
+.chip.bad b{color:var(--red)}
+.btn.danger{border-color:var(--red);color:var(--red)}
+.overlay{z-index:10}
+#dipOv,#helpOv{grid-template-rows:minmax(0,1fr)}
+.dipcard{max-height:100%;overflow:hidden}
+.diplist{overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;padding-right:4px}
+.helpcard{touch-action:pan-y}
+.evcard{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:5;width:min(430px,calc(100% - 20px));background:var(--scrim);border:1px solid var(--amber);padding:10px 12px;display:grid;gap:6px}
+.evcard[hidden],.drow[hidden],.dact .btn[hidden],.dborder[hidden]{display:none}
+.evt{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.evt b{font:400 17px var(--f-display);letter-spacing:.05em;text-transform:uppercase}
+.evt span{font:500 12px var(--f-mono);color:var(--amber)}
+.evcard p{margin:0;font-size:13px}
+.evopts{display:grid;gap:5px}
+.evopts .btn{text-align:left;font-weight:500}
+.dipcard{max-width:940px;display:flex;flex-direction:column;gap:6px;padding:14px 16px}
+.diphead{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.diphead h2{margin:0;font:400 24px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.dipsum{margin:0;font:500 12px var(--f-mono);color:var(--muted)}
+.dipmsg{margin:0;min-height:18px;font:500 12px var(--f-mono);color:var(--amber)}
+.diplist{overflow-y:auto;display:grid;gap:6px;align-content:start;min-height:0}
+.drow{display:grid;gap:5px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--line);padding:7px 10px}
+.drow[data-rel="war"]{border-left-color:var(--red)}
+.drow[data-rel="ally"]{border-left-color:var(--ok)}
+.drow[data-rel="trade"]{border-left-color:var(--blue)}
+.drow[data-rel="truce"]{border-left-color:var(--amber)}
+.dl1,.dl2{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.dl1 i{width:12px;height:12px;display:block}
+.dl1 b{font-size:14px}
+.dborder,.dpers{font:500 10.5px var(--f-mono);padding:1px 6px;border:1px solid var(--line);color:var(--muted)}
+.dst{margin-left:auto;font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dst.war{color:var(--red)}.dst.ally{color:var(--ok)}.dst.trade{color:var(--blue)}.dst.truce{color:var(--amber)}
+.dstat{font:400 12px var(--f-mono);color:var(--muted)}
+.opbar{position:relative;width:96px;height:6px;background:var(--line);display:block}
+.opbar::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.opbar i{position:absolute;top:0;bottom:0;display:block}
+.dact{margin-left:auto;display:flex;flex-wrap:wrap;gap:5px}
+.nrow[data-rel="war"] .nm::after{content:" war";color:var(--red);font-weight:400}
+.nrow[data-rel="ally"] .nm::after{content:" ally";color:var(--ok);font-weight:400}
+.nrow[data-rel="trade"] .nm::after{content:" trade";color:var(--blue);font-weight:400}
+.nrow[data-rel="truce"] .nm::after{content:" truce";color:var(--amber);font-weight:400}
+@media (max-width:720px){
+  .dock{left:6px;right:6px;bottom:6px;padding:6px 8px}
+  .pane{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .item{min-width:116px;flex:none}
+  .rightcol{width:164px}
+  .stage.st-open .hudlog{max-width:calc(100% - 200px)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>Skyfront</h1>
+    <div class="hud" id="hud"></div>
+    <div class="ctl">
+      <button class="btn sm" id="pauseBtn">Pause<kbd>Space</kbd></button>
+      <label for="speed">Speed <select id="speed"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
+      <label for="diff">AI <select id="diff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></label>
+      <button class="btn sm" id="dipBtn">Diplomacy<kbd>P</kbd></button>
+      <button class="btn sm" id="helpBtn">Help</button>
+      <button class="btn sm" id="newBtn">New game</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="cv" role="img" aria-label="Strategy map with colored nations. Drag to pan, scroll or pinch to zoom."></canvas>
+    <ul class="hudlog" id="log"></ul>
+    <div class="rightcol"><div class="standings-ov"><div class="sh"><span>Standings</span><button id="stToggle" aria-expanded="true">Hide</button></div><div class="standings" id="standings"></div></div><canvas id="mini" width="320" height="128" aria-label="Minimap. Click or drag to move the view."></canvas></div>
+    <div class="zoom"><button class="btn" id="zIn" aria-label="Zoom in">+</button><button class="btn" id="zOut" aria-label="Zoom out">&minus;</button><button class="btn" id="zFit" aria-label="Fit whole map">&#9635;</button></div>
+    <div class="dock" id="dock">
+      <div class="spawnbar" id="spawnBar" hidden><span><b>Choose your country</b> &nbsp;This is the real Earth. Click any coloured country to lead it (hover to see its rivals). Drag to pan, scroll or pinch to zoom, WASD to move.</span><button class="btn sm" id="randomSpawn">Random country</button></div>
+      <div id="dockMain">
+        <div class="dockhead"><span class="statusline" id="statusLine"></span><button class="btn sm" id="allIn" aria-pressed="false" title="Spend all your gold with one click (X)">All-in: off</button><button class="btn sm" id="dockToggle" aria-expanded="true">Hide</button></div>
+        <div class="tabs" id="tabs" role="group" aria-label="Order categories"></div>
+        <div class="panes" id="panes"></div>
+      </div>
+    </div>
+    <div class="evcard" id="evCard" hidden><div class="evt"><b id="evTitle"></b><span id="evTime"></span></div><p id="evText"></p><div class="evopts" id="evOpts"></div></div>
+    <div class="evcard warprompt" id="warPrompt" hidden><div class="evt"><b id="wpTitle"></b></div><p id="wpText"></p><div class="evopts"><button class="btn" id="wpGo">Declare war and attack</button><button class="btn sm" id="wpDip">Open Diplomacy</button><button class="btn sm" id="wpNo">Cancel</button></div></div>
+    <div class="overlay" id="overlay" hidden></div>
+    <div class="overlay" id="dipOv" hidden><div class="result dipcard" role="dialog" aria-label="Diplomacy"><div class="diphead"><h2>Diplomacy</h2><button class="btn sm" id="dipClose">Close<kbd>P</kbd></button></div><p class="dipsum" id="dipSum"></p><p class="dipmsg" id="dipMsg" role="status"></p><div class="dipnews" id="dipNews"></div><div class="diplist" id="dipList"></div></div></div>
+    <div class="overlay" id="helpOv" hidden><div class="result helpcard"><h2>How to play</h2>
+      <ul>
+        <li>Move the map: drag it, or use WASD or the arrow keys. Scroll or pinch to zoom. Click the minimap to jump.</li>
+        <li>The map is the real Earth, one tile about 33 km wide. Pick a country, then click land to send troops. Grey land is unclaimed (small countries and wilderness) and is cheap to take. Enemy land costs more the denser their troops. Islands and coasts across a narrow strait (about 230 km) can still be attacked by land.</li>
+        <li>Troops regrow up to a cap set by your land, cities and barracks. Gold comes from land and cities.</li>
+        <li>Make soldiers faster: build barracks for steady troops, recruit troops instantly with gold in the Troops tab, or run a conscription drive for triple growth.</li>
+        <li>All-in button (or X): turns on one-click spending. With it on, one click on land builds as many of the selected building as your gold allows around that spot, one click on a building upgrades its whole type, and Recruit uses all your gold. SAM sites are easy to fool at level 1 and get much harder to beat at level 4.</li>
+        <li>Satellites (Air tab, up to 3) are your spy network. Without them other nations' troop numbers show as ?. Level 1 shows rough troops, level 2 exact troops, gold and buildings, level 3 their war plans, who they fight, and alerts when they prepare or launch an attack on you.</li>
+        <li>Retaking your own land is cheaper: your homeland tiles cost about a third as many troops to recapture, and a nation that has lost land keeps part of its old troop cap so it can fight back.</li>
+        <li>Battles are decided by force. Sending a bigger army than the defenders have makes you faster and cheaper per tile; sending less makes you slower and the AI wins ground. The defenders lose troops for every tile you take, and troops you send out also still help defend home. Your homeland tiles are cheaper to retake.</li>
+        <li>Friends are hard to make now: trade deals need real goodwill (gifts give only +5 and work every 45s, and stop helping once a nation already likes you). Alliances need 90 seconds of trade, a very warm relationship, and a clean reputation, and you can have at most 3 allies. Open disputes block deals until you settle them.</li>
+        <li>Nuclear missiles: Nuclear (320 gold, one silo, radius 6) and Thermonuclear (650 gold, two silos, radius 9). Using either makes you infamous and other nations like you less. A nuclear deal in Diplomacy forbids them.</li>
+        <li>Ships: Coastal batteries (Navy tab) shoot enemy troop ships nearby, ports shoot a little, and airfields with fighters also fire at ships close by. Navy &gt; Sink ship fires an anti-ship missile at a ship you click. A sunk ship loses every soldier on it.</li>
+        <li>Fighter jets guard your airfields. They cannot be flown by hand: they automatically shoot at enemy bombers and missiles passing within about 34 tiles (only from nations at war with you), and at enemy troop ships nearby.</li>
+        <li>Combat: every tile costs about as many troops as the defender has per tile (mountains cost nearly three times more) and the defender loses almost as many. In Attack mode with satellite level 2, hover enemy land to see how many tiles your troops can take. To beat a nation you usually need clearly more troops than it has, and the Troops slider decides how many you commit.</li>
+        <li>Diplomacy: Settle dispute (gold) removes a rivalry such as the Iran and USA sanctions feud and warms relations. Nuclear deal bans nuclear strikes between you and the other nation and calms tensions. When someone attacks your ally you get a call to arms: join the war or stay out.</li>
+        <li>Build cities, barracks, markets, mines, missile silos, SAM sites (they shoot missiles down), airfields for jets, defense posts and ports. Use Upgrade in the Build tab and click a building to raise it up to level 4.</li>
+        <li>No land border? Build a Port on your coast, then use the Navy tab: click an enemy (at war) or unclaimed coast and a transport fleet sails there, lands a beachhead and keeps fighting. More and higher-level ports carry bigger landings.</li>
+        <li>Missiles flatten land and kill troops in a blast circle. MIRVs overwhelm SAMs. Thermonuclear warheads need two silos.</li>
+        <li>Bombers fly out, hit a target and fly home to be reused. Fighters guard and shoot down missiles and bombers.</li>
+        <li>AI nations only go to war for a reason: a real-world dispute (Kashmir, Taiwan, Crimea, the Korean border and more), a border feud, revenge, a rising superpower, or to defend an ally. The reason shows in the news. Wars against a rival you have a dispute with cost you no reputation.</li>
+        <li>You are a president, not just a general. You cannot attack a nation unless you are at war with it: open Diplomacy (P) to declare war, ask for a ceasefire, sign trade deals, form alliances or send gifts. The game pauses while you negotiate.</li>
+        <li>Run the economy in the Economy tab. Taxes raise gold but lower approval; unhappy people grow troops slower and revolt if approval collapses. Build markets and mines, sign trade deals, or issue bonds for quick cash.</li>
+        <li>Decisions pop up now and then (strikes, investors, scandals) and AI nations send offers. Answer them before the timer runs out.</li>
+        <li>Win by holding 50% of the land, by being the last nation standing, or by leading an alliance bloc that holds 55% of the land for 45 seconds.</li>
+      </ul><button class="btn pri" id="helpClose">Got it</button></div></div>
+  </main>
+</div>
+
+<script>
+(()=>{
+'use strict';
+const MW=1200,MH=480,N=MW*MH,TICK=.1,WIN_SHARE=.5,NCOUNT=48,ATK=1.9,LINK_R=7;
+const TCOL=[[28,63,92],[126,154,94],[154,149,102],[138,132,120]];
+const TMUL=[0,1,1.6,2.8];
+const TNAME=['Water','Plains','Highlands','Mountains'];
+const NATS=[["USA","United States",2],["CAN","Canada",0],["MEX","Mexico",1],["CUB","Cuba",1],["COL","Colombia",1],["VEN","Venezuela",2],["BRA","Brazil",1],["PER","Peru",0],["ARG","Argentina",1],["CHL","Chile",0],["GBR","United Kingdom",1],["FRA","France",1],["DEU","Germany",0],["ESP","Spain",0],["ITA","Italy",1],["POL","Poland",1],["UKR","Ukraine",1],["RUS","Russia",2],["TUR","Turkey",2],["IRN","Iran",2],["IRQ","Iraq",1],["SAU","Saudi Arabia",1],["ISR","Israel",2],["EGY","Egypt",1],["DZA","Algeria",1],["MAR","Morocco",1],["NGA","Nigeria",1],["ETH","Ethiopia",1],["COD","DR Congo",1],["ZAF","South Africa",0],["PAK","Pakistan",2],["IND","India",1],["CHN","China",2],["PRK","North Korea",2],["KOR","South Korea",1],["JPN","Japan",0],["TWN","Taiwan",1],["VNM","Vietnam",1],["THA","Thailand",0],["IDN","Indonesia",1],["PHL","Philippines",1],["KAZ","Kazakhstan",1],["AUS","Australia",0],["AFG","Afghanistan",2],["GRC","Greece",1],["SYR","Syria",2],["SWE","Sweden",0]];
+const CC=['',...NATS.map(n=>n[0])];
+const NAMES=['You',...NATS.map(n=>n[1])];
+const NAT=(()=>{
+  const a=[[74,168,255]];
+  const f=(n,h,s,l)=>{const k=(n+h/30)%12,q=s*Math.min(l,1-l);return Math.round(255*(l-q*Math.max(-1,Math.min(k-3,9-k,1))))};
+  for(let i=0;i<NATS.length;i++){let h=(i*137.508+20)%360;if(h>185&&h<240)h=(h+70)%360;const s=.6+.14*(i%2),l=.46+.08*(i%3);a.push([f(0,h,s,l),f(8,h,s,l),f(4,h,s,l)])}
+  return a;
+})();
+const NATCSS=NAT.map(c=>`rgb(${c[0]},${c[1]},${c[2]})`);
+const NAME_OF={};NATS.forEach(n=>{NAME_OF[n[0]]=n[1]});
+const RIV=[
+ ['IND','PAK','the Kashmir dispute'],['IND','CHN','the disputed Himalayan border'],['CHN','TWN','reunification with Taiwan'],['PRK','KOR','the unfinished Korean War'],
+ ['CHN','JPN','the East China Sea islands'],['RUS','UKR','Crimea and the Donbas'],['ISR','IRN','Iran\'s nuclear program'],['ISR','SYR','the Golan Heights'],
+ ['IRN','SAU','rivalry over the Gulf'],['IRN','IRQ','the old Iran-Iraq feud'],['USA','IRN','sanctions and old hostility'],['USA','RUS','the NATO-Russia standoff'],
+ ['USA','CHN','the Pacific and trade rivalry'],['USA','PRK','North Korea\'s missiles'],['USA','CUB','the Cuban embargo'],['USA','VEN','oil and sanctions'],
+ ['TUR','GRC','the Aegean and Cyprus'],['TUR','SYR','the Kurdish border'],['TUR','RUS','Black Sea influence'],['EGY','ETH','the Nile dam'],['DZA','MAR','Western Sahara'],
+ ['GBR','ARG','the Falkland Islands'],['ESP','GBR','Gibraltar'],['PER','CHL','the old Pacific War'],['VEN','COL','the border and refugees'],
+ ['VNM','CHN','the South China Sea'],['PHL','CHN','the South China Sea'],['AFG','PAK','the Durand Line'],['JPN','KOR','wartime history and islets'],
+ ['JPN','RUS','the Kuril Islands'],['POL','RUS','centuries of rivalry'],['SWE','RUS','Baltic security'],['IRQ','TUR','water and Kurdish militants']];
+const ALLIES=[['USA','GBR'],['USA','CAN'],['USA','JPN'],['USA','KOR'],['USA','AUS'],['USA','ISR'],['GBR','FRA'],['FRA','DEU'],['DEU','POL'],['POL','UKR'],['CHN','PRK'],['CHN','PAK'],['RUS','SYR'],['IRN','SYR'],['SAU','EGY'],['ITA','FRA']];
+const TRADES=[['USA','MEX'],['CAN','MEX'],['DEU','ITA'],['FRA','ESP'],['ITA','ESP'],['BRA','ARG'],['BRA','CHN'],['JPN','AUS'],['AUS','CHN'],['CHN','RUS'],['IND','RUS'],['CHN','THA'],['CHN','IDN'],['THA','VNM'],['KOR','JPN'],['SAU','USA'],['EGY','ISR'],['TUR','DEU'],['COL','USA'],['GBR','NGA'],['GBR','ZAF'],['CHN','ETH'],['CHN','COD'],['IRN','CHN'],['IRN','RUS'],['KAZ','RUS'],['KAZ','CHN'],['SWE','DEU'],['GRC','FRA'],['MAR','FRA'],['DZA','FRA'],['PHL','USA'],['TWN','USA'],['TWN','JPN'],['UKR','DEU'],['ARG','CHL'],['MEX','BRA']];
+const EARTH='ASwAHjBADAACBANAK7AHIBACAAGBAEAAEBAqAKuAFXDAKAACDAHAABDANABFBBJAKqAFKDAPAADDAYAACDAPAA1BAFAACBBPAKgAE7DAGAAFDBGAAiBAIAAGBAHAABBBIAKkAExDAEAAGDAPAACDA9AAKBASAACBAFAAFBAMAAGBAxAAZBAEAAGBABAKYAEnDBaAALBAIAACBAPAABBBhAACBAJAAQBAKADtTAEAGTAEqDADAACDBJAADDAFAAMBANAACBB1AAEBAIAADBATADjTAGAGVAEhDAFAAGDAMAACDAYAABDAoAAKBAFAABBCCAADBAdADTTACAAVTABAAWTADABTTAFAALTAFAEXAEaDAOAAHDAIAACDAVAAJDAfAAJBCMAABBAdADUTAFAAKTALAACTADAAITADAACTAIAAuTAEAAqTAQAETAEYDATAAQDAFAANDAlAAIBCmADQTADAAGTABAACTAGAAKTABAARTAHABoTAOAEVAEXDAYAACDADAAEDAIAAEDAqAAKBCfAABBAJAB3BABAABBAEAAFBACAACBAFABITAHAALTAFAAETABAADTADAABTADABwTASAEUAEKDAFAAHDAgAACDANAACDAkAAVBCVAAEBAFABwBADAAEBAeABNTADAAaTACABpTAHAAETALAACTAEAEMAEcDAZAAHDANAAEDAXAAbBCZABkBAHAAEBADAADBAHAAIBATADhTAWAEKAEaDACAACDACAAHDAVAACDAcAAkBCZABlBAKAABBAFAABBAKAANBAGAABBABADmTASAAHTABAABTACAEBAD4DAKAACDABAAaDAZAAGDAUAALDACAAWBChABqBAdAD6TAOAAETAFAABTAEAD9ADnDABAAXDALAAGDAEAAMDASAABDACAACDApAAOBClABoBACAACBAgAARBABAD2TAQAD5ADgDAMAAODARAAFDALAAIDAJAABDAEAAEDAmAALBCsABrBACAADBAHAAGBAJAAEBAGAEETARAD5AEADABAAGDAGAAIDAGAAaDACAACDACAACDAfAAJBCsAAHBABABxBANAAHBAIAD+TAFAASTAEADxADZDAEAABDAJAAbDAEAADDAEAAHDACAAeDADAAEDAZAAWBCmAACBACAAIBABABpBAFAACBABAADBAEAALBAKAIGADfDAKAAODADAAdDAKAAHDAEAAHDAHAACDACAABDACAABDASAAbBAEAABBADAAEBCYAB0BAOAAJBAEAACBAEAEHTAIAD5ADKDAMAAjDADAAuDACAAKDARAACDACAAnBClAACBACABtBAKADvTACAAoTAMAD5ADHDAPAA/DAIAASDAhAACDABAAZBADAABBCrABwBAGACnTAEABtTAVADyADEDAJAACDAGAAWDADAAODABAAJDACAAGDACAAHDAKAAEDADAADDACAABDAXAABDAOAAhBCYAALBABAB1BADACjTAKABeTABAAMTATAAETAMADkADADANAACDADAAEDAGAAMDAHAANDAEAAEDADAADDAIAAIDAHAABDALAANDAFAALDAGAAhBCfAAJBABAEUTAOABnTAsADhAC/DAGAABDAEAAFDABAADDAPAAJDAGAAEDABAAGDAHAACDAEAACDAIAAQDAIAAlDABAAlBADAAVBCIAEKTAWABZTAJAAGTAGAABTAtABSTAFAAGTACAB/ADLDAEAADDATAAHDAHAABDAEAALDAPAATDAKAAQDAKABKBCEAEETAUABdTBHABJTABAAFTAKAACTALAB3ADRDAnAARDAJAADDABAACDAHAAFDAUAACDAUABHBCCAEBTAPABCTABAAXTBSABJTABAAFTAQAACTAHAAFTABABvADUDAHAABDAEAACDABAACDASAADDAEAALDAJAAEDAKAAFDApABJBB7AAHBAFAD0TACAABTAOABXTACAABTBVABPTASAACTAFAAGTANAABTABABhADeDALAAvDAIAAFDApABMBB5AABBACAD9TAOABXTACAABTBTABWTAFAACTABAAGTACAARTAIABjADcDAIAAvDABAAFDABAASDABAAEDALAABDADAAEDAFABTBB8AD6TALABcTBRADmAC5DAPAAFDADADLBBzAABBAGAD7TALABdTBOAAHTAEABbTACACCAC6DAaAA6DAEAAJDAPABzBB1AD8TALABhTBJAADTAFABSTABAAOTABACDAC7DAcAAdDAHAANDANAAEDARAAJDAJAAGDAGAACDAFAACDADABJBBnAABBACAABBAMAD4TAMABQTAQAADTBFAAITAKAAGTAFAAWTABAABTAEAA0TAIAB7AC5DAdAADDABAAcDAFAAMDACAABDAJAAGDAPAAIDAKAADDAMAACDAMABJBBeAABBAEAABBAFAACBAEAD/TACAACTAEAArTAFAAeTASAABTBFAAHTAPAACTAPAAQTAQAAsTAHAB6AC4DAZAACDAJAATDAIAABDACAAJDABAAGDAGAAEDACAADDAOAAHDAKAADDAQAACDANABEBBuAD9TAKAAuTACAAMTADAATTBUAABTAsAABTABAALTATACqAC3DAVAADDAMAADDAHAAEDADAAEDAJAAJDAEAACDAMAAGDAEAAFDACAAJDAJAAEDARABRBADAACBBeAACBAEAABBAIAD4TALAAsTAMAAITABAAMTACAAETBsAABTA1AAnTADAB/AC2DAUAADDAXAACDAIAADDAIAALDASAAFDAFAANDALAADDAPAAIDALABCBBmAAEBAFAD6TAJAAtTANAAHTACAAFTAEAAJTChAAiTAWABxAC1DASAAGDAhAADDAJAAPDANAAFDAEAAODALAADDAQAABDARABDBBpAAEBABAD4TALAAsTANAAITACAAGTAKAAGTCZAACTACAAjTAUAABTAMABlAC4DAPAAEDAkAADDAJAAQDALAAEDADAAPDANAACDAlAA/BBuAD2TAOAArTANAAFTAFAADTAEAACTALAAHTCXAABTABAAjTASAADTANABkTAFAC2DALAAJDAtAARDAEAAHDAIAAMDAPAADDAjAADDAFAA2BAFAACBABAACBBVAAEBALAD3TAOAApTANAAETAIAADTAWAACTCYAAKTADAAHTAEAACTAGAADTAiABkTAIABFCACABuDAEAARDAqAAbDALAAODAMAACDAtAA6BABAABBBbAAEBAKAD3TACAACTAIAAkTASAAETAIAAITANAADTCbAAITASAACTAuABbTADAABTACABICAFAACCACAB5DAwAAZDAMAAMDAFAABDAzAABDAFAA9BABAABBBOAADBACAACBACAAEBAJACaBABAAIBAEABUTAKAAhTAUAAETAPAACTALAAETCcAAFTBDAAITAPABDTADAABABDCAZAB0DAKAAEDAhAABDABAAHDABAAODANAALDA8AABDAHAAvBAIAADBBNAABBAIAAFBAIACRBAEAACBABAABBAEAACBACAABBAEAABBAGABVTACAABTACAAeTABAACTASAAGTAaAABTACAACTD9ABEABACACAABCAmABEDADAA0DAfAATDAPAANDAEAACDAYAACDAYAABDAIAAzBBZACkBABAABBABAABBAFAABBASABcTADAAaTASAAFTAdAACTD/ABDAA7CA4AAECAFAAoDAEAAEDAFAAHDABAAYDA2AAQDAOAAQDADAAFDALAADDAGAAEDAZAABDADAACDADAAqBAHAACBADAABBBOAABBARACTBAEAABBATABjTAEAAYTASAAETEfAAjTAEAAcAA5CBHAAgDAFAACDALAAFDACAAFDAFAAPDAwAACDABAABDACAAIDADAAGDAKAAYDAFAAMDABAABDABAAJDAdAACDABAApBAKAACBABAABBBbACLBACAABBAjAADBABTABAACTAEABZTAJAAPTATAADTEgAAbTAEAAETAUAAMAA4CBKDAHAAMDAFAACDAEAABDABAACDAQAADDACAAEDAKAAMDAuAABDACAACDABAAIDAHAACDACAAEDABAABDAKAARDAKAAUDAfAAtBAFAAEBBZACLBACAACBADAABBABAABBAgTAKAA0TADAAkTAOAAMTAPAAETEiAABTAYAAITAaAAFAA3CBLDAKAAHDAKAABDAvAAQDAWAAEDAOAAJDAKAAGDALAAFDACAAMDANAAIDABAAKDAZAA7BBUACIBABAAEBABAACBAmTANAABTAIAApTAHAAiTARAAITAPAAETAFAAETE0AAHTAcAACTACAAsCBUDARAABDAHAADDA7AAEDARAAHDACAAHDADAAIDABAAFDAKAAEDACAABDAKAADDAFAAKDANAAQDACAAEDASAABDAEAA3BBVACHBACAABBABAABBABAADBAKwACBAaTAcAAlTAEAAMTADAAOTADAAFTAVAAHTAMAAITAGAADTEyAAETAfTAEAAqCBUDBZAADDAHAAKDAHAABDABAACDABAAYDAEAAJDAKAACDAHAAHDAOAAVDABAACDABAABDATAAyBAEAABBBQACPBADAABBAGwABBAFwAGBAWTAgAASTACAABTAEAAXTAFAAFTAMAADTAaAADTAQAADTAJAADTEUAABTA/TAIAAmCBUDBXAAVDADAAEDAFAAWDAGAAIDATAABDABAAEDABAACDALAALDABAAHDAFAAHDAVAABDABAAuBACAACBBAAABBAGACRBABAACBABAAFBAHwAQBASTAjAARTAHAAOTALAABTACAABTA9AAFTAJAACTFUTAMAAmCBQDBWAAQDABAADDABAAEDAQAAODABAABDABAABDAFAACDAYAAEDACAABDANAARDAHAABDAEAACDAXAABDADAAmBBHACWBABAAGBABAABBAEwAXBATTAkAANTAJAAJTBPAAFTAIAABTFWTAQAAlCBNDBrAADDAiAACDADAADDAZAAFDAQAAODAIAAIDAcAAjBAIAABBA8AChBAEwAXBAWTAlAAKTAEAAKTBSAAGTAKAACTFTTARAAlCBMDBtAACDAmAADDAaAACDATAAODAFAALDAZAACDABAABDABAAgBBDACgBAGwAZBAUTAmAAJTAEAAJTBSAAGTFhTARAABTAGAAgCACAABCBHDBtAADDBWAAeDAfAAgBBCACgBAIwAYBASTALAACTAcAAKTAEAAHTBRAAGTFiTARAADTAIAAeCBIDBuAABDAnAABDAtAAfDAmAAcBA/ACfBAIwAbBARTAMAAETAYAALTBSAAETABAABTADAAFTFkTASAABTABAABTAKAATCAEAAGCADAADCBADC1AAFDAEAABDACAAfDAWAACDARAAaBAEAABBA7AA8BACABhBAHwAcBATTAOAAGTARAAFTACAAGTBVAAITFnTACAADTAdAALCABAACCAGAAHCBFDC3AAnDAUAABDACAAFDAMAAdBABAABBAyAACBAGAArBAEAAJBABAABBABAADBAHABbBABAACBAFwAfBATTAPAALTAGAAHTAHAACTHFTABAADTAcAAKCBYDCpAADDAKAACDABAABDACAACDABAAgDAUAAJDAKAAfBAyAABBACAABBABAArBAIAADBACAABBAEAABBALABbBAHwAfBAUTAQAATTHRTACAADTAEAACTAOAACTADAAKCBaDCsAADDAFAADDADAAnDAVAAHDAGAAjBACAABBAnAAKBABAAqBAEAACBAEAABBAYABXBAHwAaAAKBAPTAQAASTHTTABAANTALAAUCBVDCzAAEDAHAAWDAiAAIDABAABDADAAkBAqAA6BAeABWBABAABBAFwAYAAMBAPTAQAASTHTAAOTALAAUCBVDCzAAEDAKAARDAIAABDAcAAxBAlAA7BAgABSBABAABBAJwAYAANBAPTARAAGTAEAAITHIAABTAIAABAATTAFAAVCAOAAFCBCDCyAAEDAOAANDAMAABDAeAAsBAEAABBABAABBAgAA9BAaABVBAJwAZAAKBATTAQAAHTAIAACTHGAABTABAABTABAAETABAAEAAWTACAAnCBDDCxAAFDAQAANDAFAAKDAbAArBAnAA/BAWABVBAMwAYAAJBAVTASAAHTHSAAIABACBCDCqAABDAEAAHDAJAACDAEAABDABAABDABAAaDAaAAuBAkAA7BABAABBAUABXBAKwACBACwAXAAJBAXTATAAGTHUAAFABACBCDCiAACDAGAAKDALAAEDAHAAbDALAABDAOAArBAlABDBAJABbBAEAABBAEwAbAAIBAYTHwAAEAAbCAHAAZCBHDCnAASDADAAUDADAACDABAARDALAADDAIAABDABAAsBAiABJBADABXBABAABBAFAABBAHwAXAAKBAcTHuAAEAAiCABAARCACAADCBJDCoAARDABAAYDABAAVDALAAEDAHAAuBAgAClBANwAWAAKBAgTHuAACAAzCBPDCmAAaDAFAAkDABAABDALAAGDABAAyBAcACiBARwAVAAKBAiTHtAACAAzCBPDCiAAdDAFAAQDABAAWDABAADDAJAA2BAbACiBATwAUAAKBAiTG4AAGTAoAADTAFAACAAwCBSDCgAAfDADAAJDADAAEDAKAACDAEAAQDAIAA3BAYAB1BADAAnBAXwASAAMBAgTG5AADTAnAAOAAwCBSDCfAArDADAAFDASAAUDACAA4BAXACeBAYwARAANBAeTG7AADTAkAARAAuCBUDCeAA1DAUAAVDACAA0BAXACeBAYwAQAAPBAbTGoAALTAHAACTABAACTAgAAWAAvCA1AABCAdDCdAA2DAUABMBAVACfBAHAABBASwAOAAPBAaTGoAALTAGAAITAdAAYAAyCAuAAFCAEAACCAXDCcAA2DAaABJBAHAABBALACgBAYwAPAAOBAZTGpAAMTAEAAITAeAAZAAyCACAABCABAABCAnAACCAJAAHCASDCbAA1DABAACDAbABIBABAAEBANACfBAYwARAANBAXTGpAAPTACAAHTAdAAcAAyCAqAABCABAACCALAAECABAADCABAABCANDCaAA5DAaAAGDABAAKDABABBBAGACLMABAAVBAFAABBATwASAAOBAPAAGTGmAAXTASAAHTAEAAfAAqCAGAAECAGAABCAgAAECALAANCARDCUAA6DAaAAPDACABABAHACjBAXwAUAAEBABAAFBABAACBABAABBAGAAQTGhAAXTAMAADTACAAKTACAAgAAtCABAAHCADAAECAdAAFCAHAAGCABAAVCAFAABCADDCSAAxDABAAIDAaAAPDADABDBABACjBABAABBAVwAXAAiTGhAAXTAIAAETABAAyAA9CAbAAICADAAjCAFDAHCAEDCGAA5DAbAAODAFADmBAWwAXAAXBAEAAFTGTAAFTABAACTAJAAVTAJAA4AA8CAaAAICACAApCAEDAECAGDCFAA4DAdAAMDAHADKMACAAZBABAACBAPAABBADwAWAASBAOTF+AALTACAATTAKAARTAKAA4AA9CADAACCAFAABCARAAzCADAACCAHDCEAA3DAdAAMDAJADIMACAAcBABAABBALAAFwABBABwAUAAPBADAABBAOTF9AAfTADAACTABAAWTALAADTADAAzAA8CACAABCABAAFCACAABCABAADCAMAA1CAEAACCACAABCAEDCIAAwDAiAAGDAMADlBALAAHwARAAXBAPTF8AA7TAKAAETABAA2ABLCALAAFCACAAzCACAADCABAACCADDCHAAyDAgAABDABAACDAMAABDACAC7MABAAEMAGAAfBAJAAJwASAARBAEAACBACAABBAKTF6AA8TAKAA8ABLCAKAAECACAA2CAFAABCAFDCHAA0DAcAABDACAABDAOAABDACAC5MACAADMAFAAkBADAAMwASAAZBALTF5AA7TAMAA8ABKCAHAAGCAFAA2CADAACCADAABCACDCGAA1DAxAC8MAGAA0wAQAAGwACAASBALTF3AA4TAVAA4ABJCAGAAFCAHAA4CACAADCABAACCADDCGAA0DAwAACDABAC2MACAACMANAAnBACAAFwAPAAFwADAAJBAEAAFBALTF1AA6TAUAA5AAgCABAAnCAHAAGCADAABCABAA5CABAABCADAADCAEDCFAADDAEAAuDAyAC0MABAAEMANAAlBAFAAGwAOAABwABAAEwABAAJBAGAAEBAMTFyAA7TAVAA5ABHCAFABJCACAABCABAABCADAABCACDCQAApDAyAC6MALAAkBACAABBADAAIwAOAAOBAXTFxAA7TAWAA5ABDCAGABNCABAACCADAABCABAABCADDCQAAnDAxAC5MABAACMAJAAkBAIAAIwALAABwABAAOBAYTFvAA7TAYAA4ABBCAHABRCABAABCABAACCAHDCOAAaDABAABDADAAHDAxAC8MAJAAkBAJAAHwAKAARBAYTFtAA8TAZAA4AA+CACAABCAFABWCACAABCACAABCAFDCPAAXDABAAKDA0AC4MACAADMAHAAjBAHAAEBABAABBACAABwAFAAWBAcTFoAA9TAVAA8AA7CAHABaCAEAABCACAABCACDCUAAdDA4AC0MABAABMACAABMAKAAhBAGAAEBAFAABwAFAAXBAfTFiAA/TAUAA9AA6CADABfCADAACCACAABCADAABDCUAAZDA6ACwBABAAIMALAAiBADAABBADAABBAEAAeBAgTB+rADTDeABBTAUAA9AA2CABAACCABAAICABAABCABABXCAEAABCABAABCADAABDCeAAODA+AABDABACpBAEMAEAADMAMAAiBADAAHBABAAJBABAAVTAEBAcTB8rAJTDXAAFTABAABTADAA6TAVAAOTABAAtAAzCAFABlCABAABCABAAGDCgAAJDBIACkBAEMAGAACMABAAEMAIAAgOAFAAEBACAATRAEAAETAKBAbTB4rAOTDWAAITABAA7TAVAA8AAyCACAAFCABABrDCgAAKDBJACkBABMAIAAHMAKAAgOAEAADOABAAGOABAAKRAHAADTALBAcTBxrAUTDbAA/TAQABBAAuCABABtDABAAKDCeAALDBJACeBAIMABBACMACAAEBABAAEMALAAeOAGAAEOAGAAFRAbBAbTBprAfTAMrADTDIAABTABAAETAFAAITACAAqTAOABDAArCACABvDADAABDABAADDABAABDAFAABDCaAALDBBAABDAGACfBALAALMAKAAeOAQAACRAeBAcTBirApTAFrAGTDIAABTACAACTAHAA0TANABDAArCABABxDADAAFDABAABDCfAALDA+AACDAMACZBAOAAKMAKAAYOADAABOAURAfBAdTBhrAnTABrACTABrAKTDHAABTADAABTAHAAGTACAArTANABDAAmCABAB3DACAALDCbAALDBNACaBABAABBAKAAFMABAABMAOAAPBABAABBAGOAYRAfBAdTBhrA3TCPiAMTA4AACTAEAArTANABDACfDACAAIDACAABDCaAABDAEAAGDBNACaBAMAAFMAPAACMACAANBAHOAXRAhBAYTBjrADTABrA2TCMiASTAzAADTAFAAqTAIAAvCACAAXACgDACAAHDABAABDABAABDADAABDCWAALDBMACaBALAAHMAUAAJBAIOAZRAfBAaTBirA7TCKiAUTAzAACTAFAArTAHABIAATCABAAFCABACTDCbAAKDBMACZBAMAAHMAUAAJBAIOAaRAcBAcTBirA7TCMiATTAyAABTAFAAsTAHABIAAQCACAACCABACYDCdAAFDABAACDBMACZBAIAAJMAVAAJBAIOAbRAeBAYSALTBXrA+TBCBABTBIiAUTAxAABTAFAAtTAGABIAAICAEACiDCdAAGDBLACbBAFAALMAUAAKBAHOAdRAeBACSAJBAMSANTBWrA/TBABAFTBEiAVTAxAACTAFAAsTAFABJACvDCdAADDBJAAEDADACtMABAACMALAAKBAJOAdRAdSATBABSACBABSAMTA2rAKTAarA9TA+BAMTA9iAXTAvAAETAEAAsTADABLACuDDmAAHDADACsMATAAEBALOAeRAdSAmTAxrAOTAZrA9TACrACTA4BAOTA7iAYTAuAAFTAFAArTACABMACtDABAAEDDhAAHDAEACrMAKAABMAGAADNAEBALOAbBAERAdSAmTAurARTABrABTAErAJTAJrA9TABrAETAFrADTAwBAOTA5iAaTAtAAFTAFAAnTABAACTABABOACtDABAABDACAACDACAABDABAABDDaAAHDAEACrMAEAARNAGBAKOAXBALRAZSAmTAsrAkTABrBRTAZBAJTANBAOTA5iAaTAsAAGTAFAAoTABABQACuDAJAABDDEAANDAGAAJDAEACqMACAADMABAARNAJBAHOATBAPRACBACRATSAvTAhrACTACrB3TAVBANTAMBARTAEBAITAZBABTAQiAbTArAAGTAFAAmTADABQACwDAHAABDDBAAeDAEAABDADAC9NAKBABNABBAFOAVBATRAQSA0TAcrAETACrB4TAQBASTACBACTAFBAiTASBAGTACBACTAIiAdTArAAGTAGAB4ACxDABAABDAFAABDACAABDC8AALDAEAAQDAHAAFDABACuNACAAFNARBADOAVBAVRANSA4TAYrCATAErABTAJBA+TARBAMiACTADiAgTAqAAGTAGAB4ACzDAGAAEDBeCABDBbAAODAEAANDAKAABDABAABDACACtNAEAACNAWOAVBAXRACBABRABBADRADSA6TAWrCGTAEBBETAKBAQiAsTAkAAGTAHAAiTABABUAC1DAGAADDBdCABDBXAAGDAIAAUDAQACuNAfOASBAfSA6TAYrCEiAEBBeiAuTAjAAFTAEAB7AC3DAGAADCBdDBVAAEDAMAATDAPACoNACAAFNAgOATBAcSA6TAYrCFiAEBBeiAwTAgAAGTADAAlTABABWAC6DADAABCBmDBNAACDAPAATDAPAABDACAChNAqOATBAdSA7TAWrCEiAHBBciAyTAfAAGTADAB8AC4CAEAABCABAACCBmDACCABDAHCADDA8AACDALAABDACAAUDASACkNAoOASBAgSANBAGSAnTAYrCAiALBBZiAzTAJiAETARAAITABAB9AC5CB8DA6AABDANAADDABAARDATAABDABACjNAnOASBAnSACBANSAjTAZrCAiAOBBWiACBABiABBABiACBAEiAoTAGiAHTAPAAKTABAB9AC6CAFAABCB4DA2AABDARAAKDABAASDACAACDACAABDADACoNAiBAIOAGBA6SAfTAhrB8iAQBBgiA0TAPAAJTADAB8AC6CAEAABCB7DAzAABDACCACDABCACDAKAAKDABAAVDACAADDAEACpNAeBBLSAeTACAABTAfrB8iAQBBgiAxTAQAAKTAEAB7AC7CCCDAyCAHDAKAACDABAALDABAAODADAADDAFACpNAdBAPQADBA7SAaAAFTAhrAGAADrADAABrBliAFrACiATBBgiAwTAPAALTAEAB7AC7CCCDArAABDAGCAHDAKAABDACAAKDACAAWDABACsNAbBAOQAHBA6SAGAABSANAAHTAjrAFAAKrBjiAbBBaiAEBACiAwTAOAAMTACAABTACAB6AC6CCGDAuCAIDALAACDAGAADDACADFNAZBABNACBAEQABBADQABBACQALBAzSAGAAESALAAKTAlAANrBjiAbBBWiA5TAPAAMTABAAETABAB5AC7CCHDAsCAIDANAADDACAADDACAABDACADENAbBAEQACBABQAPBAzSAFAALTADSABAALTAjAAPrBiiAcBBViA6TAOAANTABAAaTABABjAC7CCHDArCAJDAKAABDAGAACDABAABDABAACDABADGNAaQAWAABBAxSAFAAKTAGSABAAJTAjAAPrBjiAbBBViA6TAOACNAC7CCJDAdAACDAJCALDAHAACDAMADINAcQARAAEBAxSAFAAKTAJAAITAgAARrABAABrAQBADrBPiAbBBTiA7TANAAmTABABoAC7CCKDAlCAODADAAFDABAABDAJADJNAbQASAAEBACAABBAzAANTAJAABTAkAANrASBAJrBIiAiBBNiA6TACiADTAMAAQlADAARTACABqAC7CCKDAYCAcAAFDAKADMNAbQATAAEBABAADBAuAABBACAANTAFAAHTAhAANrARBANrBCiAuBA8iAEBADiA6TASAARlAEAAPTABABsAC6CCLDAXCAaAAGDAIADQNAbQASAAJBAuAAQTACAANTAdAAMrACAACrAPBAPrBCiAuBA6iBBTARAATlAEAANTABABtAC6CCMDAUCAYAAKDAFADTNAbQAFAADQAKAAJBAtAAiTAcAAMrASBARrBAiAyBA2iBBTAQAATlAHAAFlABAABTABABxAC6CCMDATCAYAAKDAFAAQDABADCNAeQACAAHQAHBABQABAAHBABAABBArAAkTAbAAMrARBASrA/iAyBA3iBATAPAAUlAKAABlABAABTABAByAC6CCMDASCAWAAPDABAC/PADAATNAdAAKQALAAIBAqAAlTAbAALrARBATrAKBABrA0iAyBA2iBATAOAAUlANAB0AC6CCMDAKCAdADPPAUAABPABNASAAFNAFAANQALAAJBABAABBAlAAoBADTAVAANrAQBAfrAziAyBAziBDTAMAAWlANAABlABAByAC5CCMDAMCAbADNPAbNAOAAZQALAAMBAjAArBAHTAPAAOrAPBAgrAaBAErATiA0BAxiBETACAACTAGAAVlAQAB0AC5CCMDALCAcADOPAeNACPACNAGAAVNABAAEQALAALBABAABBAhAAtBAITANAAQrAMBAhrASBADrAEBATrADiA2BABiADBAriBBjABiABTADAAFTABAAXlAMAB5AC5CCLDAJCAfADPPAjNAFAASNADAAFQALAAOBAeAAvBANTAIAAPrAMBAhrARBAHrABBAVrABiBIBAaiBDjADTABAAelACAABlACAADlAEAB6AC5CCKDAGCAjADPPAoAASNADAAHQAKAAOBAeAAuBANTAJAAOrACBAFrAFBAhrAQBAfiBKBANiBMjAEAAhlABAAIlACAB6AC6CCJDADCAnADNBAFPABBACPAgAATNACAAKQANAALBAXUAFAAQUAIAAWBAQTAHAANBABAAEBADrAEBAjrAMBAfiBQBAHiBLjAGAAilADACCAC6CCxAABCABADOBAIPAdAAWNABAALQALAAMBAWuACUAFAANUANAASBAEUABBAOTAEBACAAMBABAAEBAErADBAjrAJBAfiCgjACiAEjAEAAjlABACEAC6CCrADWBAHPAcAAoQAJAAKBALuAMUAIAAJUASAAOUAHBAOTACBAEAASBAorAIBAfiCgjALAAllACACBAC6CCoAACCACADVBAGPAaAAaQADAAPQALAAHBAIuAKAABuAEUAEAAFUAeAACUAQBATAAMBABAAFBAtrACBAbiCkjAMAAklABACDAC6CCqADXBAGPAaAAYQAGAAPQAMAAEBAGuAJAADuABAAEUAEAAGUAxBAUAAKBA0rABBAaiCUAAEiALjANAAklAFACAAC5CCoADaBAGPAYAAbQAEAASQAGAACQADAAEBAEuAGAACuACAABuABAAHUADAACUA0BAXAAIBBJiADBABiCVAAFiAJjANAAmlAFACAAC6CCnADZBAHPAXAANPABAAOQAEAAUQADAAFQACAAEBACuAHAAEuABAAIUA6BATAALBBHiCZAAGiAJjANAAmlAHAB/AC7CChAABCAEADZBAHPAWAAKPADAAQQAEAAVQACAAKuABAABBABuAIAALUA+BAQAANBBEiCYAAHiAGAAEjAKAAqlAGAB/AC7CCfAABCAFADZBAHPAXAAKPACAARQAEAAVQAEAAJuALAAMUA7VACBAIVADBADAANBBEiCYAAHiAEAAKjAHAAqlAGAB/AC8CCdAABCADAABCABADaBAHPAXAAdQACAABQABAAWQADAAMuAHAABuABAABuABAAGuACAABUA6VAEBAFVAFBADAAPBBDiCTAABiABAALiABAALjAHAAplAHAB/AC8CCdAABCADADbBAIPAYAA2QACAANuAJAAMUA6VAMBADAARBBCiCSAAMiABAAMjAKAAnlAGACAAC9CCZAABCACAABCAEACaBABABABAHPAYAA1QACAAPuAIAABuACAAFuABAABUA8VAOBABAAQBBDiABBACiCPAAZjALAAllAHACAAC+CCZAABCABAACCACADeBAFPAWAA1QADAAOuABAADuACAACuAFAAFuABAABUA8VAPAARBAIVABBAutADBALiCQAAXjAHkAGAAglABAADlAFACCAC/CCbAACCABADdBAGPAWAAsQAJAABQACAARuAGAACuABAACuABAAIUA4VAQAAQBAFVAHBArtAEBAMiCTAAUjAFkAHAAglABAAClAGACCADBCCYAACCABADfBAEPAXAAsQAJAAUuAGAAGuABAADuABAABuABUA6VAQAAQBADVALBABVABBAmtAEBAMiCTAAEiADAARkAJAAhlAHACCADACCZADiBAEPATAAzQAFAAWuAEAAPUAzWACUAFVASAANBABVARBAVtACBABtABBAItAHBAGtACBABtACBABiCTAADiAJAANkAJAAZlABAAFlAIACCADBCCZADjBABAAEPAQAAbaABAACaABAAFBAEAACBABAALQADAAVuAFAAOUAsvAGWAGUABWABVATAAMVAUBAQtAKBACtAKBAEtAGiCgAAPkAIAAZlABAADlAKACCADCCCZADoPAIAABPABAABPABAATaAHAACaAJBAJAAMQABAAYuABAABuABAAHuABAAHUACAABUAHAADUAKAABUADAACUABvABUADvADUADvAIWAKVAUAAGVAZBAPtAXBABtABgAKiCaAAQkALAAYlANACDADCCCZADoPAEAAUaAZBAIAA9UAFAAFUAHAAGUACvAQWAMVA2BALtAYgAOiCWAATkAJAAYlAOACDADCCCYAABCABADoPACAATaAbBAHAA5uACAAOUADAAJUABvAQWAOVA1BAKtAYgAPiCTAABiABAAUkAJAAXlAPACDADDCCXADrbABAAQaABAABaAbBAIAANBABABGvABUABvARWAOVA0BAGtAcgAQiCSAAWkAKAAVlAQACDADECCXADpbADAANaAgBAJAAruABAAJuABAAXBABAAEvATWAPVAztABBAFtAdgARBABiCOAAXkAJAAQlAEAAClANAABlABACEADFCCUADrbAEAADbABAABbABAAFaAhBAJAAquAHAABuABAAWBADAAHvARWARVAytAEBABtAegASBABhACiCKAAXkAKAALlAWAABlADACEADGCCTADqbAOaAjBAIAAuuACAAYBAEAAIvARWAQVAztAigAShAFiCIAAYkAFAABkABAAMlAWAABlABAAClABACFADGCCRADsbAPaAhBAJABUvARWAPVAztAigAKhADgADhAIiCJAAXkAEAAGlABAAHlAIAADlAFAAClABAAClABACLADKCCLADtbAQaAgBAIABVBADvAOWAQVAztAigAJhARiCKAAklAHAAFlABAABlAFACQADICABAADCCIADtbARaAfBAJABVBACvANWARVAztAjgAJhAQiCLAAjlAFAAElAEAABlAEACSADNCCEADvbASaAfBAJAACBABABRBACvAMWAUVAytAfgAOhAQiCLAAelABAAClACAAFlAHAAClADACSADQCCAADtbAVaAgBALABRBACvAKWAXVAytAfgANhAQiCLAATkACAAKlAGAAClAEAAClABACYADRCB/ADrbAYaAfBANABOBABYACvAIBABWAZVAwtAfgAOhARiCLAAdlAIAAClACACcADRCB9ADsbAZaAgBAOAACBACAAbBADAAqYACvAHBAEWAZVAvtAegAQhAQiCLAAdlACAABlAFAAClABACdADSEAHCBzADtbAbaAgBAUAAVBAIAAnYADBABvAEBAGWAbVAttAdgAShAMiABhACiCLAAglAEAChADSEAKCBvADubAbaAhBAWAAQBAKAAnYABBAOWAbVAttAcgAUhALiCPAAclABAABlAEAChADTEAMCBrADubAWaAoBAVAAQBAQAAhYABBAMXAFWAZVAstAcgAShANiCKAABiABAABiADAAclAEACiADTEAGAACEAHCANEAHCBTADvbATaAsBAVAAOBASAAfYACBAIXAMWAWVAstAYgACtABgAShAPiCOAAdlABAABlACACiADUEAFAAEEAJCAJEAICBSADubAUaAsBAWAAOBAQZAIAAKZAFAAIYAEBAGXAOWAVVAvtAUgAXhANiABhABiCNAAdlABAABlABACjADUEAFAAGEAZCBQADvbAVaArBAbAAJBAQZAMAAEZAPYAEBAHXAPWATVAvtAQgAbhAQiCNADCADVEAFAAFEAaCBPADvbATaAtBAeAAGBAQZAgYADBAIXAQWASVAutAPgAahAUiCKADDADVEAFAAGEAbCA3AABCACAABCABAACCAQADvbAPaAxBAeAADBASZAgYACBAJXARWARVADAABVAptAQgAZhAXiCGAAhlABACjADWEAEAAGEAbCAwAAQCAOADvbAPaAwBAzZAiYABBAIXATWARVACAACVABAABVAltARgAZhAYiABBADiCAAABiACADDADWEAFAAGEAaCAzAAOCACAADCAIADubANaA0BAzZAZAABZAHYABBAFXAYWALBAEAAGVAktASgAXhAYBAHiCEADBADYEAEAABEABAADEAbCAFEAGCAUAAKCABAABCAGAAVCAIADsbAKaA4BAzZAZAABZAHYABBAFXAZWAJBAEAAIVAkgACtAJgAdhAYBAJiCAAABiABADBADZEAEAABEABAADEAcCADEAHCATAANCACAABCABAACCABAAUCAHADsbAIaA7BAyZAaAABZAGXADBABXAdWAHBAEAAJVAjgAohAXBALiAlhABiADhACiBVADCADaEAEAADEAoCARAAqCAHADfPABAAJbAIaA9BAyZAaAABZAGXAqBADAAJVAjgAlhAZBAOiAghAHiABhABiBUADCADbEAEAAEEAmCAQAArCAHADRPABAAMPABAAJbAIaA+BAyZAaAACZAEAABXArBACAAJVAkgAjhAcBANiAdhAKiBUADDADcEAEAAFEAlCALAAvCAHADVPACAAHPABAAIbAJaA+BAyZAbAACZADAABXAuAAJVAlgAghAeBAOiAahAOiABBABiBPAAalABACoADbEAFAAFEAmCAKAAvCAIADSPABAABPABAADPABAAKbAMaA+BAyZAcAACZACAACXAtAAJVAmgAfhAgBAOiACBABiAGhABiACBAFiAGhAPBADiBMADFADZEACAABEAEAAHEAkCAIAAxCAIADPPABAAQbAPaA+BAyZAdAAGXAtAALVAjgAZhACgABhAlBAUhACiABBAIhABiABhAQBAEiBLADGADaEAIAAFEAlCAHAAxCAIADgbAPaA+BAyZAdAAHXAtAALVAigAYhAsBABhABBABhABBAMhADBALhAQBAGiBJADGADbEAHAAHEAkCAGAAyCAIADebAQBABaA9BAyZAeAAGXAuAAMVAKAACVAWgAVhAyBALhADBALhANBADhABBAFiBIADHADdEAGAAHEAjCAGAAzCAHADebAHBAMaA7BAyZAeAAHXAuAAMVAHAABVABAADVAVgAVhA0BAKhADBAEhABBAEhANBAKiBHAAblABACsADfEAFAAIEAhCAGAA0CAGAAEBABADYbAIBANaA6BAyZAfAAHXAuAAPVABAAHVASgAahA2BAGhAXBAMiBGAAblABACtADhEAEAAHEAjCAFAAzCAGADbbAJBAQaA2BA0ZAfAAHXAuAAYVAPgAchA8BAChAVBAMiBGADJADiEADAAGEAoCABAA0CAFAAJBABADRbAIBATaA1BAzZAgAAHXAtAABBABAABBACAAPBABAADVAPgAchA8BAFhASBAMiBGADJADiEADAAHEAoAA1CADADbbAIBAVaA1BAyZAgAAIXAsAADBACAAOBACAAFVANgAehA7BAEhARBAMiBGADKADiEAEAAIEAlAA3CACADbbAIBAXaAzBAyZAhAAIXAsAABBADAANBADAAOVADgAHAACgAEAAEgAOhA8BADhAQBAMiBGADLADiEAFAAJEAjABABABADTbAIBAZaAxBAyZAhAAIXAtBADAAMBAEAAigAOhA7BANhAIBAKiBGAAImACADCADjEAEAAJEAjABABACADRbAIBAbaAxBAxZAiAAHXAtBADAAKBAGAAkgANhA5BANhAIBAKiBHAAHmADADCADkEADAALEAgABCBABADQbAIBAeaAyBAuZAiAAIXAuAAKBAIAAjgANhA5BANhAIBAKiBEAABmABAAHmAEADCADmEADAAJEAgABCBABAAHBABADHbAIBAgaAzBAsZAjAAJXAtBABAACBABAAEBAKAAigAFhBDBAJhAJBAMiBDAAImAFADCADnEADAAKEAeABDBABADNbAIBAjaAxBAsZAjAAKXAtBATAAigABhBEBAJhAHBASiA/AAJmAEADDADoEADAAJEAeAERbAGBAmaAxBArZAjAAKXAtBAXAAghBDBAJhACBAChADBASiA9AAKmAFADDADpEACAAKEAdAEQbAHBAoaAtBAtZAkAAKXAtBAXAAghBDBAIhACBAChADBATiAUnABiAmAALmAFADDADpEABAAMEAcAAwFAKAASBABADDbAHBApaArBAuZAkAALXAtBAWAAhhAEAABhA9BAMhADBAViARnAFiAYAABiAIAAOmADADEAD3EAbAAuFAEAADFAJAARBABADAbAHBAraAnBAwZAmAAJXA1BAPAAkhA+BAGAABBABAABBADhACBAViAKnABiACnACiABnAJiAWAABiAEAASmACADFAD4EAaAAtFAEAAEFALAABFABADNbAIBAsaAkBAyZAnAAIXA3BAOAAfhBDBAGAADBAChADBAUiAIBABnAPiAYAABBABAAVmABADFABDCACACzEAaAAtFABAAMFAJADLbAIBAvaAhBAzZAVBABZASAAHXA3BAOAAfhALAABhA1AABhABBACAABBABAAFBADhABBAXiAGBACnAPiAVAAZmABADFAD4EAaAAxFACAAJFAIADJbAIBAyaAdBBdAAHXA3BANAAihAJAABhAzAABhABAABhABBABAAJBAaiAGBADnAPiAQADjABJCABACvEAbAAcEAGAANFABAAOFAGADHbABBAFbACBAzaAaBBfAAIXA2BANAAjhAIAABhAwAARBAeiACBAEnAQAAHiAEADmABMCACACrEAaAAZEALAAbFAIAAJBACAC6BA9aAXBBhAAHXA2BALAAmhAGAAChAvAASBAknAPAAIiACADoABOCACACoEAcAAXEALAAdFAJADEBA8aAVBBjAAHXA1BAMAAnhADAAFhAvAASBAknACBACnAJAAJiACADoAD5EAbAAWEALAABEABAAgFAIADCBA8aATBBkAAIXA0BALAAwhAvAASBAonAHAALiACADoABQCABACnEAdAAVEALAAhFALADBBA9aAPBBmAAKXAyBAJAACBABAAvhAuAAUBAXoADBAOnAGAD1ABQCADAClEAeAAUEALAAgFAEAADFABADFBBAaALBBnAALXAwBAKAAxhAuAAWBABAABBASoAFBAOnAEAAMiAFADmABQCADACmEAeAATEAKAAvBAMACyBBCaAJBBoAAMXAsBAMAAyhArAAcBAOoAIBAMnABBABnAEAALiAGADmABQCADACnEAdAATEAKAAyBAJACyBBCaAHBBqAANXAoBAQAAyhAoAAeBANoALBAJnAHAAJiAHADnAD8EAcAAQEAMAAxBAMACxBBBaABBBxAAMXAlBATAAyhAoAAdBABAABBAMoAMBAKnAEAAKiAGADoAD+EAbAANEABAABEAKAABEABAAyBAOAANBABACgBCzAAMXAeBAWAA2hAnAAgBAMoALBANnACAAKiAGADoAD/EAdAAGEAPBABAAiBADAAJBAFAABBAOAAEBAEACmBC1AALXAZBAaAA2hAmAAhBALoAMBANnADAAKiAEAAjqADAACqABADAAEBEAvBACAAiBAGAAHBABAAGBADAANBAFACmBC1AALXAWBAbAA3hAkAAkBALoALBADoABBADoADBAFnACAAwqAFADBAEFEAqBADAAkBACAARBABAC5BC2AAKXAVBAZAA7hAiAAlBALoALBACoAJBAEnADAAuqAGADBAEGEAjBAJADwBC3AAMXASBAZAA8hAhAAmBALoAKBABoAMBAEnACAAuqAGADBAEIEAfBALADwBC4AALXADBAKXABBABXACBAaAA8hAfAAoBAMoAWBAFnACAAtqAHADAAEKEAeBAKADwBC4AAMXACBAkABAhAeAApBAIAABBAEoAVBAGnACAAsqAHADAAENEAdBAIADvBC6AAJXABAABXACBAhABDhAeAApBAHAACBAEoAVBAGnADAArqAHADAAEPEAMAACEAOBAGAAGBABABTNABACVBC6AAMBAgABGhAaAABhABAApBAGAAFBAFoAUBAGnADAAqqAGABOBABAByAESEAIAAEEAIBAKABaNABACABABAAVBC6AACBABAAJBAfABHhAaAArBABAABBADAAGBAEoAWBAHnADAAmqAHADCAEVEADAAIEAGBAZADiBC6AACBABAAIBAgABIhAWAA6BADoAXBAFnAFAAmqAFADDAEhEAEBAbABLBABACUBC8AALBAeABJhAVAA7BADoAXBAGnAEAAmqAFADDAEjEACBAdADdBC/AAJBAbABMhAVAA7BABoAZBAHnAEAAlqAFADDAEkEABBAdADEBABAAXBDCAAHBAYABQhAUAA7BABoAZBAGnAFAAlqAFAABqABADBAElBAeABJNABACSBC3dACBACdABBAGAAGBAVABUhATAA7BACoAYBAGnAGAAlqABAABqACADDAEmBAdADdBCydANBADAAGBATABVhATAA8BACoAOBAPnAGAAmqAEAACqACAC+AEoBAaADeBCxdAQBACAAFBAPABahASAA8BADoANBAPnAGAAmqAIAABqABAC8AEsBAWADfBBGcAGBAXcABBBMdAQBAEAADBAOABbhATAA8BACoAMBAQnAGAArqABAABqADAABqACAC5AEvBAEAABBANADfBBGcAIBAOcACBAEcAEBBLdASBACAADBAIABhhATAA8BADoACAADoAFBASnAFAAmqACAACqABAABqABAACqACABFBABAB1AE1BANADeBBGcAJBABcAEBAFcAOBBKdASBADAADBAGABihATAAphABAATBABoAEAACoAFBARnAHAAlqADAAGqACAC7AE0BAOADeBBFcAiBBJdAVBADAABBADABmhARAAqhABAATBACoACAADoAGBAQnAHAAmqACAAIqABAC6AE2BAMADeBBEcAjBBHdAXBADAAiBADABFhARAAqhABAATBACoACAAHoACBAQnAGAAnqACAADqABAACqACAABqAEAC2AE3BAKAAnGADAADHABAADBABAABBABAAVBABACXBBCcAlBBFdAXBAEABphAQAA/BADoABAAJBAPnAHAAkqABAALqABAACqADAC2AE3BAKAAmGADAAEHABACzBBCcAlBBEdAXBAEAAZBACABQhAPAAqhABAAUBADoABAAKBAMnAJAAqqABAAGqABAACqACAC2AE5BAIAAkGADAAHHABAC1BA/cAlBBEdAWBADAABBABAAXBAEABRhAOAA9BABAABBACoABAALBAKnAKAAsqADAAGqACAC2AE6BAGAAhGAGHABAAFHAHACvBABAABBA/cAjBBGdAWBAGAAQBAJABThANAA/BACoABAAMBAJnAKAAjqABAAIqADAACqABAACqAEAC1AE6BAHAAdGAIHADAABHAKAAOHABACkBA9cAiBBGdAbBADAALBANABThANAA/BABoACAAMBABAABBAFnACBABnAHAAuqACAABqABAACqABAACqABAC3AE6BAIAAbGAIHAEAABHAKAAPHAGAACBACACaBA+cAgBBFdAcBAFAAEBATABThANAA+BABoACAAOBAFnAJAAnqABAAIqABAACqACAACqABAABqABAC3AE6BAIAAaGAJHAEAABHASAAFHAGAAEBACACbBA8cAhBBFdAdBAbABUhAMAA+BABoACAAPnABAABnAIAApqABAAMqABAABqABAADqACAC2AE6BACAABBAGAAZGAJHADAADHAdAChBA7cAgBBGdAdBAbABUhAKABBoACAATnAGAAoqABAAMqADAACqABAACqABAC2AE8BABAABBAGAAYGAJHADAADHAgACfBA5cAhBBGdAeBAZABVhAJAAEBABAA8oADAACoABAAQnADAABnABAAoqABAAMqAEAABqACAC5AE/BAGAAJBADAALGAIHAEAADHAiACeBA3cAhBBHdAfBAYABVhAJAAEBACAA7oADAASnAFAAoqABAAOqACAAHqACAC0AFBBAFAAGBAIAAGGALHAEAABHAjACfBA2cAhBBHdAgBAXABWhAHAAFBADAA6oAFAAQnADAApqABAAQqABAAHqADACzAFBBAHAACBAEAADBAEAAEGANHAmACgBA1cAiBBHdAiBAUABXhAGAAFBAEAA6oAFAAQnACAApqABAAXqAFACzAFBBABAABBALAAEBAEAACGAOHAlAACHADACdBA0cAgBBJdAlBARABYhAEAAGBAFAA4oAGAA6qABAATqACAADqAFACzAFDBABAACBAGAAHBADGABAABGAPHAqBABACaBA1cAgBBGdArBANABahADAAGBAFAA6oAFABMqADAABqAHACzAFIBAEAAHBAEGAQHAoBAEACaBA0cAgBBFdAyBAGABkBAGAA6oAEABKqANACzAFKBADAAGBADGAQHAoBAGACaBAzcAfBBIdAvBAHABkBAGAA7oAEABIqABAABqADAABqAJACyAFKBACAAIGATHAnBAHACaBAycAeBBKdAtBAHABlBAHAA6oADABJqABAABqABAAEqAIACyAFVGATHAEGABHAiBAGACcBAwcAeBBLdArBAIABlBAHAAnhABAAToAEABGqABAAGqAGAABqACACyAFVGAaHAeBAKACbBAvcAYBAEcACBBMdApBAIABmBAHAA8oAGAAzBABAAWqAFAACqABACzAFWGAaHAcBAMACcBAtcACAABcAUBBUdAnBAJABnBAFAA+BACoADAAxBAEAAOqABAAHqAFAABqABACzAFWGAaHACGAFHAVBANACcBAnAAMcAPBBVdAmBAJABoBADABABADoADBABAAuBAFAAWqAFAC1AFWGAhHAVBANAABBADAABBAGACTBAkAAOcANBBXdAkBAKACapABAARBACoABBABoABBACAAtBAHAAXqACAC1AFWGAhHAVBAYNACACSBAfAAScANBBXdAjBAKACbpACAAQBAIAArBAKADMAFWGAgHAXBAWNAFACRBARAABBAKAAVcALBA4eABBAhdAgBALACbpAEAABpABAAMBAJAApBANAACqABADHAFWGAgHAYIACBASNAIACQBAKAAMBACAAYcALBAjeADBAOeABBABeAJBAbdAfBALACdpAIAAJBAKAAoBAJADOAFWGAgHAXIADBATNAIACRBAFAAqcAJBAjeAFBAIeARBAbdAYBAQACfpAIAAIBAKAAkBAOADNAFWGAgHAVIAGBASNAJADAcADAAHBAgeAIBAFeATBABeAFBAXdAUBAQAChpAIAAHBAKAAjBAHpACBAGAAbpABACxAFWGAgHAKIACHAFIAKBASNAJIABADJBAgeAmBAZdAJBADdADBATACipAHAAIBAJAAPpABAASBAGpAIAAdpABACxAFXGAgHAKIAFHABIAKBATNAHIADADHBABAACBAeeAoBAYdAHBAZACkpAHAAHBAJAAhBAHpAHADQAFWGAiHAKIAPBATNAGIAEADGBABAADBAeeApBA2ACnpAHAAGBAIAAgBAIpAGAAbpABAC1AFWGAhHALIAOBATNAHIAEADLBAdeApBA1ACopAJAAFBAHAAgBAIpAGADRAFVGAhHAMIAOBATNAGIAFADLBAdeApBA0ACkpABAAFpAIAAFBAHAAbBAMpAIADQAFTGAkHAMIANBAQIABBACNAGIAGADKBAceApBA0ACmpABAAFpAIAAFBAHAAZBANpAJAAjpABACrAFSGAmHANIAMBAMIAFNACIACNACIAHADKBAceArBAwACvpAIAABpABAADBAHAAYBAMpALAAhpACACrABLBABAEGGAkIACHALIAOBAIIABBAEIASADJBAbeAsBAvACxpALAADBAFAASBABAAFBAMpAKADPAFRGAeIAJGABHAJIAQBAFIAaADHBAceArBAuAC0pAKAAFBADAARpACBACAACBAMpAMAAWpABAAIpACACtAFRBABGAdIAJGABHAIIASBACIAdADGBAceAqBAuACwpABAAEpALAAGBABAAQpADBAIpAEBABpAQAAUpACAAIpAEACrAFPBAEGAdIAKHAFIAyADHBAceApBAuACypABAAEpALAABpABAABpABAABpADAAOpAFBAFpAYAAGpAEAAHpACAAJpABAABpACACrAFNBAIGAcIAMHABIAyADIBAceAoBAtAC0pABAAEpAMAAVpAeAAHpAPAAKpADACsAFNBAJGAYIBBAABIABADGBAdeAoBAsAC6pANAABpABAASpAdAAIpABAACpABAAGpAFAAKpABAABpACACrAFNBAOGATIBAAABIADADFBABAABBAbeAnBAsAC9pAOAASpAcAAHpABADIAEnBABAAkBARJABGAQIA/AABIABAABIABADGBAceAoBArAC/pAMAADpACAAOpAcAAHpABAAipABAABpACACiAEoBABAAjBARJADGAPIA+AACIAIADABAceAoBArAC/pAMAADpABAAPpAcAAHpABAAYpADAAIpABAAEpADACdAEnBACAAjBARJADGAQIA9AACIAHAACIAEAC5BAeeAoBAqADBpALAATpAcAAHpACAAJpABAAOpABAABpABAALpAIAAEpACACTAFKBATJAEGAQIA6AABIABAABIAIAABIAHAC4BAbeAqBApAC9pABAAFpAMAASpAZAAIpAEAACpAFAAbpALAACpABAADpABACSAFLBARJAHGAOIBEAABIAKAC2BAaeArBAoAC+pABAAFpANAATpAWAAJpAEAACpAEAABpABAABpABAANpABAALpALACYAFLBARJAHGANIBDAACIANAC1BAYeAqBAqAC/pABAAFpAMAADpABAAPpAVAAKpAJAAIpABAAJpACAANpAHAAFpACAAEpADACLAFLBAQJAJGAMIBDAABIAQACzBAYeAqBAoADHpANAACpADAANpAVAAKpAHAAKpABAARpACAAFpAHAAKpAGACJAFKBAQJAKGAEJACGABJABGAEIBUAC0BAWeArBAnADEpABAADpANAAEpABAANpAVAAJpAJAAkpACAACpABAAIpAKACHAFMBAMJAWGACIBTAABIABAABIADACxBAUeAqBAnADGpABAADpAPAABpADAADpABAAHpAVAAJpAKAAkpACAABpADAAFpAPAAfBACABiAFMBABAABBAIJAYGACIBdAADIADACnBAUeArBAlADMpAPAABpABAAEpACAAGpAVAAIpAFAADpADAAVpABAACpABAAIpAJAAEpARBACACAAFNBAHJAaGABIBlACnBATeArBAlADIpABAAEpAPAAGpABAAMpAOAAJpAFAADpAEAAMpADAADpAJAAHpAIAACpASBAFAAeBABABeAFMBAHJAaGACIBnACmBASeArBAkADPpANAAcpAHAAIpAFAACpAFAAMpAEAACpABAAGpADAAHpACAABpAYBAIAB6AFLJACBAGJAZGADIBpAClBAQeAsBAkADQpAMAAdpADAACpABAAKpADAADpAEAAOpABAADpABAAIpABAAHpACAABpAYBAKAAcBABABbABTBABAD2JACBAGJAcGABIBqAClBAOeAuBAiADRpAMAAdpABAAQpACAAEpAEAABpABAAgpABAAFpAVBANAAaBABABaAFJJADBAGJAZIBvAClBAIeABBADeAvBAiADTpAKAAupACAAEpAFAAopAUBAOAAVBADAABBABABaAFJJAGBACJAXIBzACkBAHeACBACeAwBAhADVpAJAAtpADAAEpACAADpABAArpAQBAPAABBABAATBACAABBABABaAFJJAHBABJAVIB3ACjBACeA4BAgAACBABADUpAIAAtpADAAHpACAAvpANBAQAATBADABcAFKJAbIB9ACeBACeA4BAgAACBABADWpAGAAtpADAAFpABAABpADAAwpALBAQAAEBABAANBADAAIBABABUAFKJAbIB+ACeBABeA5BAfADapAFAAtpADAAIpABAAhpABAAEpABAALpAKBARAAHBADAABBAHAALBABABTAFKJAaIB/ACeeA6BAeADbpABABdpABAAFpABAAMpAJBAUAAGBAIAAMBABABTAFKJAaIB/ACeBAPeAqBAfAACBABADdpAFAArpABAAtpACAAMpAJBAWAAGBAEAAPBABABSAFMJAYIB/ACfBAOeArBAfADfpAJAAHpABABNpABAAOpAIBAXAAYBADABQAFNJAWICBACeBAOeAsBAfADdpAKAAHpADABLpABAAPpAHBAUAAcBACABQAFOJAUICCACfBAOeAIBAEeAgBAfADfpAUAABpAEABSpAIBAUAAdBABAADBABABMAFPJATICCACfBAOeAIBAIeAcBAeADgpAVAA+pABAAYpAHBAVAAhBABABLAFPJATICCACfBAPeAHBAIeAdBAdADkpASAAspABAAPpACAAVpADAABpAGBAJAABBABAACBAJABsAFQJASICCACgBAOeAGBAJeAdBAdADspAOAAmpABAAMpABAAEpABAAVpALBAJAAHBAHAAeBABAAFBACABFAFRJASICBACgBAdeAcBAeADwpAKAABpADAAIpABAASpABAACpACAABBABAAopAEAAEpADBAIAAJBAHAAeBACAAFBABABEAFRJASICAACiBAceAXBAjAD5pABAACpACAACpAFAACpADAABpAJAABpABAACpABAAGBAGAAspACBAHAALBAGAAeBABABLACEBABADNJASIB/AChBAdeAXBAkAD/pAHAAJpADAALBAFAAvpABBAIAALBAGAApBABAA/AFSJATIB9AChBAeeAWBAlAEbpACBACAAzBAHAANBAIAALBABAAYBABAABBABAA/AFTJATIB8ACiBAdeAWBAlAEJpADAANpAEABJBAHAAEBACAAdBADAACBABAA+ACIBABADKJAUIAEJACIBzACkBAdeAWBAlAEKpAEAAKpAEABMBAIAAhBADAACBABAA9AFTJAaIAMBAFIBiAClBAdeAVBAmAELpADAAJpADABNBAIAADBABABgAFUJAZIALBAGIBhACmBAdeAVBAoAFsBACAAlBABAA9AFUJAZIAJBAIIBgACoBAceAVBAoAETpABACABACAA7AFVJAYIACJABBABIADBAKIBfACpBAceAVBAoAFTsABAB9AFVJAcBANIBdACrBAjeAOBAoAEusABAABsABAAPsABAASsACAB8AFWJAbBAOIBcACrBAmeALBAoAAJBABAEhsAEAAEsACAAKsABAATsACAAjBABAAVBABABCAFXJAbBANIBcACrBAoeAEBABeAEBAoAAJBABAEjsABAAFsAEAAbsADAB8AFXJAbBAOIBaACsBAueAEBAnAEusABAAEsAIAABsABAACsABAASsAEAB7AFYJAbBAOIBZACrBAxeAFBAkAAcBACAEOsAVAAQsAGAB6AFZJAZBAUIBRAABIABACqBA0eAEBAkAAPNABAAMBADAENsAUAASsAFAB6AFZJAZBAVIBQACsBA1eADBAkAAcBADAEMsAVAARsAGAB6AFaJAYBAXIBNACsBA3eABBAlAAbBAFAELsATAATsAGAB6AAYBACAFAJAYBAbIBJACsBBdAAaBAGAEKsAUAATsAHAB5AAbBABAE+JAYBAdIBHACrBBeAAZBAHAEAsABAAIsAVAACsABAAQsAHAB5AFaJAYBAcIBIACrBBfAAXBAIAD9sAGAAFsAWAACsABAAQsAHAACsABABMBABAApAFbJAWBAeIBHACrBBfAAXBAIAD7sABAABsAHAAFsAUAAUsAKAB2AFcJAVBAeIBHACrBBfAAXBAJAD5sAKAABsACAACsATAAVsAMABHBABAAsAFdJAUBAdIBIACqBBfAAWBALAD4sAlAATsAMABHBACAADBABAAnAFeJATBAeIBHACqBBfAAUBANAD3sAnAASsAMABIBABAACBABAAoAFgJARBAeIBHACqBBeAAUBAMAABBABAD3sApAAPsAOABLBABAAnAFhJAQBAeIBHACpBBfAAQBAQAD5sArAANsAOABIBABAAqAFkJAOBAkIBAACpBBeAAPBASAD2sACAACsArAAMsAOABJBABAAnBABAABAFmJAMBAjIBBACpBBdAAQBASADzsABAACsAwAAEsABAAGsAOABLBABAAjBAEAFnJAKBAkIBBACpBBbAASBARADzsADAACsAzAAGsAQAByAADBABAFlJAHBAlIBAACqBBYAAUBASADysAEAABsA0AAGsARABxABkBACAEEJAGBAnIA+ACqBBWAAVBATADysA7AADsASABKBABAAeBADAAFABmBABAAbBABADoJAELACBAnIA9ACqBBVAAXBASADysBQABoBAEAAFAFsJADLADBAmIA8ACsBBTAAYBASADzsBPABpBACAAGAFtLAFBAmIA8ACsBBSAAZBARADysBSABwAFuLAEBAmIA8ACtBBQAAaBARADysBSABLBABAAkAFuLAEBAlIA9ACuBBNAAcBARADxsBTABwAFuLAGBAjIA9ACuBBMAAeBAPADxsBWABuAFuLAFBAjIA9ACwBBKAAfBAPADwsBZABsAFuLAFBAkIA7ACxBBJAAgBAPADssBfABqAFuLAFBAjIA8ACyBBIAAgBAOAAdBACADLsBlABnAFuLAFBAkIA6ACzBBIAAfBAPADnsBnAAzBACAAzAFuLAFBAkIA5AC1BBIAAdBAQADesABAADsBsAA0BADAAGBABAAqAFuLAGBAjIA5AC1BBIAAdBAPAAXNACADIsBvAA0BADAAwAFuLAHBAiIA4AC3BBHAAcBAQADgsBxAA1BACAAGBABAAoAFuLAHBAiIA4AC4BBHAAbBAQADesBzAA2BADAAtAFuLAHBAGKACBAGKAEBAQIA4AC4BBHAAaBAQADesB0AA4BACAAsAFuLAIBADKAIBABKAGBAWIAvAC7BAxfAHBAOAAaBAQADbsB4AABsABABjAFuLAIBACKAJBABKAHBAWIAtAC8BAufALBANAAaBAQADbsB8ABhAFtLALKARBAWIAmAABIACAABIABAC+BAtfAMBAOAAaBAOADcsB8ABhAFtLALKASBAVIAkADFBAsfANBANAAbBAOADcsB8ABhAFtLALKAUBATIAiADHBAqfAPBANAAcBANADcsB9ABgAFtLALKAVBASIAfADKBAqfAQBAMAAcBANADbsB+ABgAFtLAKKAaBASIAZADMBAqfAQBAMAAcBAMADcsCAABeAFtLAHKAeBARIAYADOBAofASBAKAAdBAMADcsCBABdAFtLAGKAhBAPIAXADPBAlfAVBAJAAeBALADesCBABcAFtLAHKAjBAMIAVADRBASfABBASfAVBAGAAiBAJADfsCCABbAFtLAGKAlBAKIAWADRBASfABBAJfABBAIfAVBAEAAmBAEADjsCBAABsABABZAFsLAIKAkBAKKACIATADTBARfACBAHfAFBAEfAWBACAELsABAABsABAABsCCABaAFsLAIKAjBALKADIARADUBARfACBAHfAcBAFAENsABAACsCCABZAFsLAIKAiBAMKADIARADUBARfACBAGfAcBAGAEMsABAABsABAABsCBABaAFsLAHKAjBALKAEIARADUBARfACBAFfAdBAHAEMsCEABaAFsLAIKAiBAKKAFIARADVBAQfAkBAEfABBACAENsCDABaADrLABACALAHKAiBAKKAFIASADVBAQfAlBACfADAEPsCCABaAFsLAGKAnBADKAGIAVADUBAQfAqAEPsCEABYAFrLAHKAvIAVADWBAPfAqAEPsCDABZAFrLAGKAuIAXADXBAOfAqAEQsCDABYAFrLAFKAuIAYADYBACfACBAJfApAERsCDABYAFqLAGKAtIAYADafADBAHfAeBABfAMAESsCCABYAFqLAFKAtIAXADdfAkBAFfAJAEUsCCABYAFqLAFKAsIAYADdfAkBAGfAHAEWsCAABZAFqLAFKArIAYADffAiBAHfAGAEXsCAABZAFqLAFKAqIAYADgfAhBAHfAGAEYsCAABZAFqLAFKApIACBABIAWADgfAiBAEfAIAEYsCAABZAFpLAFKApBAFIARAACIABADifAiBACfAIAEasB+ABaAFpLAFKApBAGIAQAACIABADifArAEbsB+ABaAFpLAFKApBAGIABBABIANAACIABADkfAqAEbsB+ABaAFpLAEKAqBAKIAKAACIABADmfAoAEdsB9ABaAFpLAEKAqBALIAIAACIABADofAlAEgsAtAAIsBGABbAFqLAEKAoBAOIAHADqfAkAEhsAqAAMsBFABbAFqLAEKAoBAPIAFADrfAjAEisAnAAVsA+ABcAFqLAEKAoBAQIADADsfAiAEjsAgAAdsA9ABcAFqLAEKAoBARIACADrfAiAEjsAfAAfsAMAABsAuABeAFpLAFKAnAABBAQIACADsfAgAEmsAcAAisAKAACsAtABfAFpLAGKAmBARIABADufAeAEmsAcAAksAJAACsAtABfAFpLAGKAmBARADvfAZAEpsAdAAmsAGAADsAtABgAFoLAHKAmAABBAPADwfAOAABfACAACfADAEssAQAA0sAEAAEsAtABgAFoLAGKAnAACBAOADzfAJAE4sANAA1sADAAEsACAABsAqABhAFoLAGKAoAAEBAKAD1fACAE/sAJAA4sACAAFsACAABsAqABJBABAAXAFnLAHKAqAJEsAGAA/sACAADsApABKBABAAWAFnLAGKAsAKHsABAAEsApABLBADAAUAFmLAHKAsAKMsABAACsAlABNBAEAASAFmLAHKAsAKGsAFAAEsAlABOBACAATAFlLAIKAsAKQsAjABQBACAACBABAAPAFlLAHKAvAKPsAiABRBACAARAFkLAHKAwAKPsAiABRBACAACBABAAOAFkLAHKAwAKPsAiABTBABAABBABAAOAFiLAJKAvAKQsAiABTBAEAANAFiLAJKAuAKSsAgABUBAEAAGBACAAFAFjLAIKAtAKUsAZABaBAHAACBADAAFAFjLAIKAsAKYsALAABsABAABsAGABbBAMAAGAFjLAJKApAKfsAEAAEsAGABcBAMAAGAFjLAHKAeAABKAHAKusACABeBALAAHAFkLAGKAeAABKABAMRBAMAAJAFkLAGKAfAMSBALAAKAFjLAGKAgAMVBAIAAKAFiLAHKAfAK9sABABaBAGAAKAFiLAHKAfAK+sABABZBAFAALAFiLAGKAgAMPBABAAIBAEAAMAFhLAHKAXAADKAGAKysAEAAGsACABQBADAAGBAEAANAFiLAGKAXAK7sAMABQBADAABBABAABBABAABBAEAAOAFiLAGKAXAK8sALABPBAHAAEBABAAPAFhLABAADLAEKAWAK9sAKABOBAJAATAFhLACAADLACKAYAADKABAK4sAKABNBAJAAUAFhLACAADLACKAcAK4sAJABOBAIAAVAFhLACAACLADKAXAADKACAK5sAIABNBAIAAWAFgLADAACLADKAZAK9sAFAABsABABLBAJAAXAFhLABAACLAEKAXALAsADABNBAJAAYAFlLAEKAVAMPBALAAYAALBABAFYLAFKAVAMNBALAAaAFhLABAACLAFKAVAMLBAKAAdAFgLABAADLABAABLAFKATAMKBALAAdAFgLACAADLADKAVAMJBANAAdAFhLABAABLAHKAQAMLBANAAeAFhLABAABLAHKAOAMMBAOAAeAFhLABAABLAGKAOAMOBAMAAfAFeLADAACLAGKAOAMNBAMAAgAFdLAMKAOAMQBAHAAiAFcLABAABLALKAPAM4AFhLAHKARAMOBABAAoAFgLAIKAVAMJBABAApAFgLAHKAWAMzAFeLABAABLACAABLADKAVAM1AFcLALKAVAM0AFcLABAABLABAACLAFKAUAM2AFeLABAABLAGKASAM4AFcLABAABLAGKATAM5AFcLAHKATAM6AFcLAHKATAM6AFhLACKAQAABKACAM6AFdLABAACLADKAQAM9AFfLABAABLADKAOAM+AFeLADAABLAFKAKAM/AFgLAHKALAM+AFdLABAAELAFKALAAcBABAABBACAABBACAABBABAMZAFeLABAACLAHKAKAAdBACAABBAEAMaAFeLABAAELABAABLAKKAEAAaBACAACBACAABBABAMbAFhLAPANAAFhLACAABLABAAELAEAADLABAABLABAM9AFgLABAACLAGAACLABAACLAFKABAM8AFjLABAABLABAABLABAABLACAACLAGKABAM8AFiLADAACLAEAAFLADKACAM7AFlLACAADLABAABLABAABLAFKAEAM5AFoLADAABLABAACLAEKAFAM4AFqLACAABLAEAABLABKAIAM1AFsLADAABLADKAMAACKACAMtAFrLADAABLAFAABLADAM4AFwLABAABLACAM8AF3LABAM4ASwASwASwASwASwASwASwASwASwASwASwASwASwASw';
+const B64I={};'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split('').forEach((c,i)=>{B64I[c]=i});
+const EOWN=new Uint8Array(MW*MH);
+function decodeEarth(){let p=0,i=0;while(p<EARTH.length){const v=B64I[EARTH[p]],r=(B64I[EARTH[p+1]]<<6)|B64I[EARTH[p+2]];p+=3;EOWN.fill(v,i,i+r);i+=r}}
+const RANGES=[
+ [2.2,[-150,62],[-135,60],[-125,56],[-117,50],[-111,44],[-107,37],[-106,31]],[1.4,[-108,30],[-105,24],[-100,19]],[1,[-85,34],[-80,37],[-74,42]],
+ [1.7,[-72,11],[-76,3],[-78,-3],[-76,-10],[-71,-17],[-69,-24],[-70,-33],[-71,-42],[-73,-52]],
+ [1.1,[6,44.5],[8,46],[13,46.8],[17,47.2]],[.5,[-2,43],[3,42.5]],[.7,[19,49.5],[24,48],[26,46]],[1,[6,59],[8,62],[14,66],[19,69]],
+ [.9,[59,67],[60,60],[59,54],[58,50]],[1,[38,44],[44,42.5],[49,41]],[.9,[30,37],[36,37.5],[43,38]],[1.2,[46,36],[50,32],[55,28]],
+ [1.2,[67,37],[72,35],[76,36]],[1.6,[74,35],[80,31],[86,28],[92,28],[97,28.5]],[2.2,[80,35],[90,34],[100,34]],[1.4,[70,41],[78,42],[85,43]],
+ [1.4,[87,49],[95,50],[100,51]],[1,[100,26],[103,29]],[.9,[-8,31],[-2,34],[5,36],[10,36]],[1.8,[36,13],[38,9],[40,6]],[.9,[30,-22],[29,-28],[27,-31]],
+ [.9,[145,-17],[150,-26],[150,-34],[147,-37]],[.6,[138,36],[140,38]],[.6,[96,5],[101,-1],[105,-5]],[.9,[136,-4],[142,-6],[148,-7]],
+ [1.2,[5,23],[8,22]],[1.2,[17,21],[19,19]],[.5,[-5,57],[-4,58]],[.5,[-6,40],[-3,41]],[.4,[121,22.5],[121.5,25]]];
+const DESERTS=[[5,23,32,8.5],[25,26,10,6],[46,24,14,8],[58,32,7,5],[71,27,4,3.5],[105,43,13,5],[83,39,7,3],[133,-25,15,8],[21,-23,7,6],[15,-22,3,6],[-70,-23,2.5,6],[-108,30,6,4],[-116,39,5,5],[62,41,9,4.5]];
+const JUNGLES=[[-62,-4,14,7],[22,0,9,6],[-5,6,10,2.5],[100,15,8,10],[120,-3,30,8],[-85,11,6,5],[90,24,5,3],[-70,6,6,4],[49,-18,2,6]];
+const BIO_C=[null,[200,176,112],[198,208,204],[64,128,78]],BIO_A=[0,.65,.55,.45];
+const orig=new Int8Array(MW*MH);
+const LINK=new Map(),LK=new Uint8Array(MW*MH),bio=new Uint8Array(MW*MH);
+
+const MISSILES={
+  cruise:{name:'Cruise',cost:40,r:2,kf:1.2,speed:120,cool:5,silos:1,p:.5,n:1,desc:'Cheap and fast. Small blast.'},
+  ballistic:{name:'Ballistic',cost:120,r:4,kf:1.6,speed:90,cool:9,silos:1,p:.38,n:1,desc:'Medium blast.'},
+  mirv:{name:'MIRV',cost:220,r:2.6,kf:1.4,speed:82,cool:14,silos:1,p:.33,n:5,spread:6,desc:'Five warheads. Overwhelms SAMs.'},
+  nuclear:{name:'Nuclear',cost:320,r:6,kf:1.9,speed:70,cool:18,silos:1,p:.25,n:1,desc:'Big blast, one silo. The world hates it.'},
+  nuke:{name:'Thermonuclear',cost:650,r:9,kf:2.2,speed:58,cool:25,silos:2,p:.2,n:1,desc:'Huge blast. Needs two silos.'}
+};
+const BUILD={
+  city:{name:'City',cost:100,desc:'+400 troop cap, +2 gold/s'},
+  silo:{name:'Missile silo',cost:220,desc:'Launches missiles'},
+  sam:{name:'SAM site',cost:140,desc:'Shoots down missiles and bombers'},
+  air:{name:'Airfield',cost:180,desc:'Hangar for 4 jets'},
+  post:{name:'Defense post',cost:90,desc:'Slows invaders nearby'},
+  barracks:{name:'Barracks',cost:120,desc:'+4 troops/s, +300 troop cap'},
+  market:{name:'Market',cost:160,desc:'+4 gold/s'},
+  mine:{name:'Mine',cost:220,desc:'+8 gold/s, mountains only'},
+  port:{name:'Port',cost:150,desc:'Sea invasions, coast only'},
+  battery:{name:'Coastal battery',cost:130,desc:'Sinks enemy ships nearby, coast only'}
+};
+const JET={bomber:{name:'Bomber',cost:60},fighter:{name:'Fighter',cost:50}};
+const DIFFS={
+  easy:{gold:.75,think:2,strike:45,nuke:.1,peace:240,opp:.5},
+  normal:{gold:1,think:1.4,strike:26,nuke:.2,peace:150,opp:.8},
+  hard:{gold:1.35,think:1,strike:15,nuke:.4,peace:90,opp:1.1}
+};
+const PERS=[{k:'builder',aggr:.45,build:1.5},{k:'balanced',aggr:.8,build:1},{k:'warlord',aggr:1.25,build:.8}];
+const REASON={revenge:'you attacked them first',leader:'you hold too much land',opportunity:'they think you are weak'};
+const SAM_R=18,FIGHTER_R=34,POST_R=8,BOMB_R=2.4,BOMB_SPEED=70,SPAWN_GAP=55,BARRACKS_RATE=4,DRIVE_LEN=45,DRIVE_COST=180,DRIVE_MULT=3;
+const SAM_SKILL=[.45,.8,1.15,1.6],FIGHT_SKILL=[.55,.8,1.05,1.3],MAXLV=4,SHIP_SPEED=20;
+const RECRUIT={small:{n:250,cost:60},big:{n:1000,cost:220}};
+const TRUCE_LEN=90,TAX_DEF=.25,TAX_MAX=.6,BLOC_SHARE=.65,BLOC_TIME=45;
+const LABEL={'buy:sat':'Satellite','b:port':'Port','u:up':'Upgrade building','n:land':'Naval landing','b:market':'Market','b:mine':'Mine','b:barracks':'Barracks','t:small':'Recruit 250','t:big':'Recruit 1000','t:drive':'Conscription drive','b:city':'City','b:silo':'Silo','b:sam':'SAM site','b:air':'Airfield','b:post':'Defense post','m:cruise':'Cruise','m:ballistic':'Ballistic','m:mirv':'MIRV','m:nuclear':'Nuclear','m:nuke':'Thermonuclear','n:sink':'Sink ship','b:battery':'Coastal battery','j:bomber':'Bomber strike','buy:bomber':'Buy bomber','buy:fighter':'Buy fighter'};
+const TABS=[['attack','Attack'],['troops','Troops'],['economy','Economy'],['build','Build'],['missile','Missiles'],['air','Air'],['navy','Navy']];
+const PANE_ITEMS={troops:['t:small','t:big','t:drive'],build:['u:up','b:barracks','b:city','b:market','b:mine','b:port','b:battery','b:silo','b:sam','b:air','b:post'],navy:['n:land','n:sink','b:battery'],missile:['m:cruise','m:ballistic','m:mirv','m:nuclear','m:nuke'],air:['j:bomber','buy:bomber','buy:fighter','buy:sat']};
+
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d'),stage=$('stage');
+const mapC=document.createElement('canvas');mapC.width=MW;mapC.height=MH;
+const mctx=mapC.getContext('2d');
+const img=mctx.createImageData(MW,MH),pix=img.data;
+const MONO="'IBM Plex Mono',ui-monospace,Menlo,monospace";
+const reduced=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+let G=null,mode='attack',tab='attack',hover=null,note='',diff='normal',CW=0,CH=0,dirty=false,acc=0,auto=false;
+const cam={x:0,y:0,z:4,minZ:1,maxZ:40};
+let needFit=true;
+const terr=new Uint8Array(N),owner=new Int8Array(N),depth=new Uint8Array(N),vari=new Uint8Array(N),scorch=new Uint8Array(N);
+
+/* ---------- utils ---------- */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const fmt=n=>n>=10000?(n/1000).toFixed(0)+'k':n>=1000?(n/1000).toFixed(1)+'k':String(Math.round(n));
+function rng32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hash(ix,iy,s){let h=Math.imul(ix,374761393)^Math.imul(iy,668265263)^Math.imul(s,1442695041);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
+function vnoise(x,y,s){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);
+  const a=hash(ix,iy,s),b=hash(ix+1,iy,s),c=hash(ix,iy+1,s),d=hash(ix+1,iy+1,s);
+  return a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;
+}
+function fbm(x,y,s){let v=0,a=.5,f=1;for(let o=0;o<4;o++){v+=a*vnoise(x*f,y*f,s+o*17);a*=.5;f*=2}return v}
+const pct=v=>{const x=v*100;return(x>0&&x<1?x.toFixed(2):x.toFixed(1))+'%'};
+const fmtTime=t=>{const s=Math.max(0,Math.floor(t));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+function log(text,cls){G.log.unshift({text,cls:cls||''});if(G.log.length>30)G.log.pop()}
+
+/* ---------- world generation ---------- */
+function genWorld(seed){
+  decodeEarth();
+  terr.fill(0);
+  let land=0;
+  for(let i=0;i<N;i++)if(EOWN[i]){terr[i]=1;land++}
+  const elev=new Float32Array(N);
+  for(const R of RANGES){
+    const w=R[0];
+    for(let k=1;k+1<R.length;k++){
+      const a=R[k],b=R[k+1];
+      const xa=Math.floor((Math.min(a[0],b[0])-w*1.6+180)/.3),xb=Math.ceil((Math.max(a[0],b[0])+w*1.6+180)/.3);
+      const ya=Math.floor((84-Math.max(a[1],b[1])-w*1.6)/.3),yb=Math.ceil((84-Math.min(a[1],b[1])+w*1.6)/.3);
+      for(let y=Math.max(0,ya);y<=Math.min(MH-1,yb);y++){
+        const lat=84-(y+.5)*.3,cl=Math.cos(lat*Math.PI/180);
+        for(let x=Math.max(0,xa);x<=Math.min(MW-1,xb);x++){
+          const lon=-180+(x+.5)*.3;
+          const vx=(b[0]-a[0])*cl,vy=b[1]-a[1],wx=(lon-a[0])*cl,wy=lat-a[1];
+          const L=vx*vx+vy*vy;let t=L>0?(wx*vx+wy*vy)/L:0;t=t<0?0:t>1?1:t;
+          const d=Math.hypot(wx-vx*t,wy-vy*t),kk=1-d/w;
+          if(kk>0&&kk>elev[y*MW+x])elev[y*MW+x]=kk;
+        }
+      }
+    }
+  }
+  const e=new Float32Array(N),vals=[];
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
+    const i=y*MW+x;if(!terr[i])continue;
+    e[i]=fbm(x/38,y/38,seed)+elev[i]*.5;vals.push(e[i]);
+  }
+  vals.sort((a,b)=>a-b);
+  const hillT=vals[Math.floor(vals.length*.74)],mtT=vals[Math.floor(vals.length*.93)];
+  bio.fill(0);
+  const inEll=(E,lon,lat,j)=>{const dx=(lon-E[0])/E[2],dy=(lat-E[1])/E[3];return dx*dx+dy*dy+j<1};
+  for(let y=0;y<MH;y++){
+    const lat=84-(y+.5)*.3;
+    for(let x=0;x<MW;x++){
+      const i=y*MW+x;if(!terr[i])continue;
+      terr[i]=e[i]>mtT?3:e[i]>hillT?2:1;
+      const lon=-180+(x+.5)*.3,j=(fbm(x/14,y/14,seed+7)-.5)*.9;
+      let b=0;
+      for(const E of DESERTS)if(inEll(E,lon,lat,j)){b=1;break}
+      if(!b)for(const E of JUNGLES)if(inEll(E,lon,lat,j)){b=3;break}
+      if(!b&&(lat>63+j*8||lat<-50||inEll([90,33,12,3.5],lon,lat,j)))b=2;
+      bio[i]=b;
+    }
+  }
+  depth.fill(0);
+  let frontier=[];
+  for(let i=0;i<N;i++)if(terr[i])frontier.push(i);
+  const seen=new Uint8Array(N);frontier.forEach(i=>{seen[i]=1});
+  for(let d=1;d<=6;d++){
+    const nxt=[];
+    for(const i of frontier){const x=i%MW,y=(i/MW)|0;
+      for(const j of [x>0?i-1:-1,x<MW-1?i+1:-1,y>0?i-MW:-1,y<MH-1?i+MW:-1]){
+        if(j>=0&&!seen[j]&&!terr[j]){seen[j]=1;depth[j]=d;nxt.push(j)}}}
+    frontier=nxt;
+  }
+  for(let i=0;i<N;i++)vari[i]=Math.floor(hash(i%MW,(i/MW)|0,seed+99)*255);
+  LINK.clear();LK.fill(0);
+  const DX=[1,-1,0,0],DY=[0,0,1,-1];
+  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){
+    const i=y*MW+x;if(!terr[i])continue;
+    for(let d=0;d<4;d++){
+      let xx=x+DX[d],yy=y+DY[d];
+      if(xx<0||yy<0||xx>=MW||yy>=MH||terr[yy*MW+xx])continue;
+      for(let k=1;k<=LINK_R;k++){
+        xx+=DX[d];yy+=DY[d];if(xx<0||yy<0||xx>=MW||yy>=MH)break;
+        const j=yy*MW+xx;
+        if(terr[j]){let l=LINK.get(i);if(!l){l=[];LINK.set(i,l);LK[i]=1}if(!l.includes(j))l.push(j);break}
+      }
+    }
+  }
+  return land;
+}
+
+/* ---------- painting ---------- */
+function isBorder(i,x,y,o){
+  if(x>0&&terr[i-1]&&owner[i-1]!==o)return true;
+  if(x<MW-1&&terr[i+1]&&owner[i+1]!==o)return true;
+  if(y>0&&terr[i-MW]&&owner[i-MW]!==o)return true;
+  if(y<MH-1&&terr[i+MW]&&owner[i+MW]!==o)return true;
+  return false;
+}
+function paint(i){
+  const t=terr[i],v=vari[i]/255;let r,g,b;
+  if(t===0){
+    const d=depth[i],k=d>0?Math.max(0,1-d/6.5):0;
+    r=TCOL[0][0]+k*40+v*5;g=TCOL[0][1]+k*54+v*5;b=TCOL[0][2]+k*50+v*5;
+  }else{
+    const c=TCOL[t];r=c[0]+v*14-7;g=c[1]+v*14-7;b=c[2]+v*14-7;
+    const bz=bio[i];if(bz){const am=BIO_A[bz]*(t===3?.45:1),bc=BIO_C[bz];r+=(bc[0]-r)*am;g+=(bc[1]-g)*am;b+=(bc[2]-b)*am}
+    const o=owner[i];
+    if(o>=0){
+      const c2=NAT[o];r=r*.3+c2[0]*.7;g=g*.3+c2[1]*.7;b=b*.3+c2[2]*.7;
+      if(isBorder(i,i%MW,(i/MW)|0,o)){r*=.58;g*=.58;b*=.58}
+    }
+    if(scorch[i]){r=r*.45+19;g=g*.45+12;b=b*.45+10}
+  }
+  const p=i*4;pix[p]=r;pix[p+1]=g;pix[p+2]=b;pix[p+3]=255;dirty=true;
+}
+function paintAround(i){
+  const x=i%MW,y=(i/MW)|0;paint(i);
+  if(x>0)paint(i-1);if(x<MW-1)paint(i+1);if(y>0)paint(i-MW);if(y<MH-1)paint(i+MW);
+}
+function paintAll(){for(let i=0;i<N;i++)paint(i);flush()}
+function flush(){if(dirty){mctx.putImageData(img,0,0);dirty=false}}
+
+/* ---------- state ---------- */
+function newNation(id,pers){
+  return{id,name:NAMES[id],human:id===0,alive:false,troops:0,gold:0,tiles:0,cx:0,cy:0,
+    cnt:{city:0,silo:0,sam:0,air:0,post:0,barracks:0,market:0,mine:0,port:0,battery:0},lsum:{city:0,silo:0,sam:0,air:0,post:0,barracks:0,market:0,mine:0,port:0,battery:0},nextUp:0,noPort:0,sats:0,home:0,warned:false,drive:0,infamy:0,tax:TAX_DEF,approval:75,unrest:0,debt:0,debtRate:0,bonusGold:0,noMine:0,bombers:0,fighters:0,aiT:Math.random()*2,nextStrike:90+Math.random()*40,nextJet:0,spawned:false,
+    cc:CC[id]||'',country:'',tens:new Float32Array(NCOUNT).map(()=>Math.random()*35),nextExp:0,grudge:new Array(NCOUNT).fill(0),war:new Array(NCOUNT).fill(0),cool:new Array(NCOUNT).fill(0),pers,lastHit:0,amb:0};
+}
+function newGame(seed){
+  const land=genWorld(seed);
+  owner.fill(-1);scorch.fill(0);
+  for(let i=0;i<N;i++){const v=EOWN[i];if(v>=2)owner[i]=v-1}
+  orig.set(owner);
+  G={seed,land,t:0,phase:'spawn',paused:true,speed:Number($('speed').value)||1,over:null,
+     nations:[],attacks:[],blds:[],bat:new Map(),missiles:[],bombers:[],boats:[],fx:[],log:[],spawns:[],nextCheck:1,news:[],
+     dbg:{decl:{},warAtk:0,neutAtk:0},event:null,evq:[],evid:0,nextEvent:110+Math.random()*40,nextOffer:70,cd:new Map(),bloc:0,blocT:0};
+  initRel();
+  for(let i=0;i<NCOUNT;i++)G.nations.push(newNation(i,i?PERS[NATS[i-1][2]]:PERS[1]));
+  const sx=new Float64Array(NCOUNT),sy=new Float64Array(NCOUNT);
+  for(let i=0;i<N;i++){const o=owner[i];if(o>=0){G.nations[o].tiles++;sx[o]+=i%MW;sy[o]+=(i/MW)|0}}
+  for(const n of G.nations){
+    if(!n.id||!n.tiles)continue;
+    n.cx=sx[n.id]/n.tiles;n.cy=sy[n.id]/n.tiles;n.alive=true;n.spawned=true;n.home=n.tiles;
+    n.troops=Math.round(troopCap(n)*.45);n.gold=Math.round(150+15*econ(n).gross);
+  }
+  mode='attack';tab='attack';note='';needFit=true;
+  paintAll();layout();
+  $('overlay').hidden=true;dipOpen=false;$('dipOv').hidden=true;evShown=-1;dipConfirm=null;
+  log('Choose a country to lead.','me');
+  buildStandings();setTab('attack');refreshUI(true);
+}
+function pickNation(k){
+  const h=G.nations[0],nk=G.nations[k];
+  if(!nk||!nk.alive||k<1)return false;
+  let x0=MW,x1=0,y0=MH,y1=0;
+  for(let i=0;i<N;i++)if(owner[i]===k){owner[i]=0;orig[i]=0;const x=i%MW,y=(i/MW)|0;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  h.tiles=nk.tiles;nk.tiles=0;h.home=nk.home;
+  h.cc=nk.cc;h.country=nk.name;h.pers=nk.pers;h.troops=nk.troops;h.gold=nk.gold;h.cx=nk.cx;h.cy=nk.cy;h.alive=true;h.spawned=true;
+  nk.alive=false;nk.spawned=false;nk.troops=0;nk.gold=0;
+  initRelations();
+  paintAll();
+  const bw=Math.max(40,x1-x0+1),bh=Math.max(30,y1-y0+1);
+  focusCam((x0+x1)/2,(y0+y1)/2,Math.min(10,Math.min(CW/(bw*1.5),CH/(bh*1.5))));
+  G.phase='play';G.paused=false;note='';
+  log(`You lead ${h.country}. Open Diplomacy (P) to see who your rivals are.`,'me');
+  const rv=RIV.filter(r=>r[0]===h.cc||r[1]===h.cc).map(r=>NAME_OF[r[0]===h.cc?r[1]:r[0]]);
+  if(rv.length)log(`Rivals: ${rv.join(', ')}.`,'hit');
+  buildStandings();
+  return true;
+}
+function trySpawn(x,y){
+  const i=y*MW+x,o=owner[i];
+  if(!terr[i]||o<1){note='Click a coloured country to lead it. Grey land is unclaimed.';return false}
+  return pickNation(o);
+}
+function randomSpawn(){
+  const c=G.nations.filter(n=>n.alive&&n.id>0&&n.tiles>=100);
+  pickNation(c[Math.floor(Math.random()*c.length)].id);refreshUI(true);
+}
+
+/* ---------- ownership and buildings ---------- */
+function setOwner(i,o){
+  const old=owner[i];
+  if(old>=0)G.nations[old].tiles--;
+  owner[i]=o;
+  if(o>=0){G.nations[o].tiles++;scorch[i]=0}
+  const b=G.bat.get(i);
+  if(b){if(o<0)removeBuilding(b);else transferBuilding(b,o)}
+  paintAround(i);
+}
+function removeBuilding(b){
+  G.blds=G.blds.filter(x=>x!==b);G.bat.delete(b.i);
+  const n=G.nations[b.owner];if(n){n.cnt[b.type]--;n.lsum[b.type]-=b.lv}
+}
+function transferBuilding(b,o){
+  const old=G.nations[b.owner];if(old){old.cnt[b.type]--;old.lsum[b.type]-=b.lv}
+  b.owner=o;G.nations[o].cnt[b.type]++;G.nations[o].lsum[b.type]+=b.lv;
+}
+const coastal=i=>{const x=i%MW,y=(i/MW)|0;return(x>0&&!terr[i-1])||(x<MW-1&&!terr[i+1])||(y>0&&!terr[i-MW])||(y<MH-1&&!terr[i+MW])};
+const upCost=b=>Math.round(BUILD[b.type].cost*1.4*b.lv);
+function upgradeBuilding(n,i){
+  let b=G.bat.get(i);
+  if(!b||b.owner!==n.id){b=null;let bd=9;for(const q of G.blds){if(q.owner!==n.id)continue;const d=Math.hypot(q.x-i%MW,q.y-((i/MW)|0));if(d<bd&&d<=2.5){bd=d;b=q}}}
+  if(!b)return 'Click one of your own buildings to upgrade it.';
+  if(b.lv>=MAXLV)return `${BUILD[b.type].name} is already max level.`;
+  const c=upCost(b);if(n.gold<c)return `Upgrade costs ${c} gold.`;
+  n.gold-=c;b.lv++;n.lsum[b.type]++;
+  return n.id===0?`${BUILD[b.type].name} upgraded to level ${b.lv}.`:'';
+}
+function buildCost(n,type){return Math.round(BUILD[type].cost*(1+.18*n.cnt[type]))}
+function tryBuild(n,type,i){
+  if(owner[i]!==n.id||!terr[i])return 'You can only build on your own land.';
+  if(G.bat.has(i))return 'That tile is already built on.';
+  if(type==='mine'&&terr[i]!==3)return 'Mines go on mountain tiles (the grey ones).';
+  if(type==='port'&&!coastal(i))return 'Ports go on the coast, next to water.';
+  if(type==='battery'&&!coastal(i))return 'Coastal batteries go on the coast, next to water.';
+  const c=buildCost(n,type);if(n.gold<c)return 'Not enough gold.';
+  n.gold-=c;
+  const b={type,i,x:i%MW,y:(i/MW)|0,owner:n.id,ready:0,lv:1};
+  G.blds.push(b);G.bat.set(i,b);n.cnt[type]++;n.lsum[type]++;
+  return '';
+}
+const troopCap=n=>40*Math.pow(n.tiles+.5*Math.max(0,(n.home||0)-n.tiles),.8)+400*n.lsum.city+300*n.lsum.barracks;
+const driveOn=n=>G.t<n.drive;
+function troopGrowth(n){
+  const cap=troopCap(n);if(n.troops>=cap)return 0;
+  const g=Math.max(.8,n.troops*.045*(1-n.troops/cap))+BARRACKS_RATE*n.lsum.barracks;
+  return g*approvalMult(n)*(driveOn(n)?DRIVE_MULT:1)*(G.t-Math.max(n.hitT||-99,n.lastHit||-99)<6?.2:1);
+}
+const ctl=n=>n.human&&!auto;
+const taxMult=n=>.4+2.4*n.tax;
+function econ(n){
+  const human=ctl(n),tm=human?taxMult(n):1;
+  const gm=human?(.7+.3*Math.min(1,n.approval/60)):DIFFS[diff].gold;
+  const land=.2*Math.pow(n.tiles,.8)*tm*gm,city=2*n.lsum.city*tm*gm;
+  const market=4*n.lsum.market*gm,mine=8*n.lsum.mine*gm;
+  let trade=0,k=0;
+  for(const d of G.nations){
+    if(!d.alive||d.id===n.id)continue;
+    const t=treatyOf(n.id,d.id);
+    if(t&&k<6){trade+=(1+.05*(.2*Math.pow(d.tiles,.8)+2*d.lsum.city))*(t===2?1.4:1);k++}
+  }
+  trade*=gm;const bonus=n.bonusGold*gm;
+  return{land,city,market,mine,trade,bonus,gross:land+city+market+mine+trade+bonus};
+}
+const goldRate=n=>econ(n).gross-(n.debt>0?n.debtRate:0);
+function approvalTarget(n){return clamp(100-n.tax*100-Math.min(4,warCount(n))*5-(n.debt>0?5:0)+Math.min(2,allyCount(n))*2,5,100)}
+const approvalMult=n=>ctl(n)?clamp(.5+n.approval/100*.67,.5,1.1):1;
+const bondGain=n=>Math.max(500,Math.round(Math.max(1,econ(n).gross)*60/50)*50);
+function issueBonds(nid){
+  const n=G.nations[nid];
+  if(n.debt>0)return 'Repay your current bonds first.';
+  const g=bondGain(n);n.gold+=g;n.debt=Math.round(g*1.3);n.debtRate=n.debt/130;
+  if(nid===0)log(`Bonds sold: +${fmt(g)} gold. You owe ${fmt(n.debt)}.`,'me');
+  return '';
+}
+function repayBonds(nid){
+  const n=G.nations[nid];
+  if(n.debt<=0)return 'You have no debt.';
+  const pay=Math.min(n.debt,n.gold);if(pay<1)return 'No gold to repay with.';
+  n.gold-=pay;n.debt-=pay;if(n.debt<.5)n.debt=0;
+  return `Repaid ${fmt(pay)} of your bonds.`;
+}
+function revolt(n){
+  n.unrest=0;n.approval=35;
+  const own=[];for(let i=0;i<N;i++)if(owner[i]===n.id&&terr[i])own.push(i);
+  const k=Math.floor(own.length*.1);
+  for(let j=0;j<k;j++){const idx=Math.floor(Math.random()*own.length),i=own[idx];own[idx]=own[own.length-1];own.pop();setOwner(i,-1)}
+  n.troops*=.8;
+  if(n.id===0)log(`Revolt! Rebels seized ${k} tiles. Cut taxes or end your wars.`,'hit');
+}
+const jetsTotal=n=>n.bombers+n.fighters+G.bombers.filter(b=>b.owner===n.id).length;
+const jetCap=n=>4*n.lsum.air;
+function eliminate(n){
+  if(!n.alive)return;
+  n.alive=false;n.troops=0;
+  for(const o of G.nations){if(o.id!==n.id){setSym(REL.war,n.id,o.id,0);setSym(REL.treaty,n.id,o.id,0);n.war[o.id]=0;o.war[n.id]=0}}
+  G.blds.filter(b=>b.owner===n.id).forEach(removeBuilding);
+  G.attacks=G.attacks.filter(a=>a.atk!==n.id);
+  G.boats=G.boats.filter(b=>b.owner!==n.id);
+  n.bombers=0;n.fighters=0;
+  log(n.human?'Your nation has fallen.':n.name+' has been eliminated.',n.human?'hit':'good');
+}
+
+/* ---------- diplomacy ---------- */
+const REL={war:null,truce:null,treaty:null,tsince:null,wsince:null,init:null,op:null};
+function initRel(){
+  const k=NCOUNT*NCOUNT;
+  REL.war=new Uint8Array(k);REL.truce=new Float32Array(k);REL.treaty=new Uint8Array(k);
+  REL.tsince=new Float32Array(k);REL.wsince=new Float32Array(k);REL.init=new Int8Array(k).fill(-1);REL.op=new Float32Array(k);
+  REL.riv=new Uint8Array(k);REL.pact=new Uint8Array(k);REL.rivText=new Map();REL.goal=new Float32Array(k);
+}
+function initRelations(){
+  const id={};for(const n of G.nations)if(n.alive&&n.cc)id[n.cc]=n.id;
+  for(const [a,b,txt] of RIV){
+    if(id[a]==null||id[b]==null)continue;
+    setSym(REL.riv,id[a],id[b],1);REL.rivText.set(pk(id[a],id[b]),txt);REL.rivText.set(pk(id[b],id[a]),txt);
+    REL.op[pk(id[a],id[b])]=-30;REL.op[pk(id[b],id[a])]=-30;
+  }
+  for(const [kind,list] of [[1,TRADES],[2,ALLIES]]){
+    for(const [a,b] of list){
+      if(id[a]==null||id[b]==null||REL.riv[pk(id[a],id[b])])continue;
+      setSym(REL.treaty,id[a],id[b],kind);setSym(REL.tsince,id[a],id[b],-300);
+      REL.op[pk(id[a],id[b])]=kind===2?55:30;REL.op[pk(id[b],id[a])]=kind===2?55:30;
+    }
+  }
+}
+const pk=(a,b)=>a*NCOUNT+b;
+const atWar=(a,b)=>a!==b&&REL.war[pk(a,b)]===1;
+const treatyOf=(a,b)=>a===b?0:REL.treaty[pk(a,b)];
+const truceLeft=(a,b)=>Math.max(0,REL.truce[pk(a,b)]-G.t);
+const allyCount=n=>{let c=0;for(const d of G.nations)if(d.alive&&d.id!==n.id&&treatyOf(n.id,d.id)===2)c++;return c};
+const warCount=n=>{let c=0;for(const d of G.nations)if(d.alive&&atWar(n.id,d.id))c++;return c};
+function setSym(arr,a,b,v){arr[pk(a,b)]=v;arr[pk(b,a)]=v}
+const opinion=(a,b)=>clamp(REL.op[pk(a,b)]-G.nations[a].grudge[b]*1.2-G.nations[b].infamy*.3,-100,100);
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function pushNews(text){G.news.unshift({t:G.t,text});if(G.news.length>12)G.news.pop()}
+function declareWar(a,b,join,why){
+  const A=G.nations[a],B=G.nations[b];
+  if(a===b||!A.alive||!B.alive)return 'That nation no longer exists.';
+  if(atWar(a,b))return `Already at war with ${B.name}.`;
+  const tl=truceLeft(a,b);if(tl>0)return `The ceasefire with ${B.name} holds for ${Math.ceil(tl)}s.`;
+  const tr=treatyOf(a,b),rt=REL.rivText.get(pk(a,b))||'';
+  const justified=!!rt||!!join||A.grudge[b]>=8||B.infamy>=50;
+  if(!why&&!join)why=rt||(A.grudge[b]>=8?'earlier attacks':B.infamy>=50?'their rogue behaviour':'');
+  if(tr){
+    setSym(REL.treaty,a,b,0);A.infamy+=tr===2?30:15;
+    for(const o of G.nations){if(o.alive&&o.id!==a&&o.id!==b)REL.op[pk(o.id,a)]-=tr===2?12:5}
+    REL.op[pk(b,a)]-=40;
+  }else if(!join&&!justified){
+    A.infamy+=8;
+    for(const o of G.nations){if(o.alive&&o.id!==a&&o.id!==b)REL.op[pk(o.id,a)]-=2}
+  }
+  A.infamy=Math.min(100,A.infamy);
+  if(REL.pact[pk(a,b)]){setSym(REL.pact,a,b,0);A.infamy+=15;REL.op[pk(b,a)]-=30;if(a===0||b===0)log(`The nuclear deal with ${G.nations[a===0?b:a].name} is void.`,'hit')}
+  setSym(REL.war,a,b,1);setSym(REL.wsince,a,b,G.t);REL.init[pk(a,b)]=a;REL.init[pk(b,a)]=a;REL.goal[pk(a,b)]=B.tiles;REL.goal[pk(b,a)]=B.tiles;
+  REL.op[pk(b,a)]-=25;REL.op[pk(a,b)]-=10;
+  if(!ctl(A)&&!(A.war[b]>0))A.war[b]=G.t+70+Math.random()*60;
+  if(!ctl(B)&&!(B.war[a]>0))B.war[a]=G.t+9999;
+  const reasonTxt=why?(join?`, ${why}`:` over ${why}`):(join?'':' with no clear reason');
+  const line=join?`${A.name} joins the war against ${B.name}${reasonTxt}`:`${A.name} declared war on ${B.name}${reasonTxt}`;
+  pushNews(line+'.');
+  if(a===0)log(`You declared war on ${B.name}${why?` over ${why}`:''}.${justified?'':' Other nations frown on this.'}`,'me');
+  else if(b===0)log(join?`${A.name} joins the war against you${reasonTxt}!`:`${A.name} declares war on you${reasonTxt}!`,'hit');
+  else if(treatyOf(0,a)||treatyOf(0,b)||(REL.war[pk(0,a)]||REL.war[pk(0,b)]))log(line+'.',join&&treatyOf(0,a)===2?'good':'');
+  if(!join&&a!==0&&b!==0&&!auto&&G.phase==='play'&&G.nations[0].alive&&treatyOf(0,b)===2&&!atWar(0,a))allyCall(a,b,why);
+  if(!join){
+    for(const c of shuffle(G.nations.slice())){
+      if(!c.alive||c.id===a||c.id===b||!AIon(c))continue;
+      const cid=c.id;
+      if(treatyOf(cid,b)===2&&!atWar(cid,a)&&treatyOf(cid,a)!==2&&truceLeft(cid,a)<=0&&Math.random()<.75)declareWar(cid,a,true,`honouring its alliance with ${B.name}`);
+      else if(treatyOf(cid,a)===2&&!atWar(cid,b)&&treatyOf(cid,b)!==2&&truceLeft(cid,b)<=0&&opinion(cid,b)<25&&Math.random()<.4)declareWar(cid,b,true,`honouring its alliance with ${A.name}`);
+    }
+  }
+  return '';
+}
+function makePeace(a,b){
+  if(!atWar(a,b))return;
+  setSym(REL.war,a,b,0);setSym(REL.truce,a,b,G.t+TRUCE_LEN);
+  G.nations[a].war[b]=0;G.nations[b].war[a]=0;
+  cancelAttacksOn(a,b);cancelAttacksOn(b,a);
+  REL.op[pk(a,b)]+=10;REL.op[pk(b,a)]+=10;
+  G.nations[a].grudge[b]*=.5;G.nations[b].grudge[a]*=.5;
+  G.nations[a].cool[b]=G.nations[b].cool[a]=G.t+TRUCE_LEN+90;G.nations[a].tens[b]=G.nations[b].tens[a]=-100;
+  if(a!==0&&b!==0)pushNews(`${G.nations[a].name} and ${G.nations[b].name} agree to a ceasefire.`);
+  if(a===0||b===0)log(`Ceasefire with ${G.nations[a===0?b:a].name} for ${TRUCE_LEN}s.`,'good');
+}
+function setTreaty(a,b,kind){
+  setSym(REL.treaty,a,b,kind);setSym(REL.tsince,a,b,G.t);
+  REL.op[pk(a,b)]+=8;REL.op[pk(b,a)]+=8;
+  if(a===0||b===0)log(`${kind===2?'Alliance':'Trade deal'} signed with ${G.nations[a===0?b:a].name}.`,'good');
+}
+function endTreaty(a,b){
+  const t=treatyOf(a,b);if(!t)return 'There is no agreement to cancel.';
+  setSym(REL.treaty,a,b,0);G.nations[a].infamy+=t===2?10:4;REL.op[pk(b,a)]-=t===2?25:10;
+  return `You ended the ${t===2?'alliance':'trade deal'} with ${G.nations[b].name}.`;
+}
+function giftTo(from,to,amt){
+  const A=G.nations[from],B=G.nations[to];
+  if(atWar(from,to))return 'You cannot send gifts to a nation you are at war with.';
+  const key='gift:'+from+':'+to,cd=G.cd.get(key);
+  if(cd>G.t)return `Wait ${Math.ceil(cd-G.t)}s before another gift.`;
+  if(REL.op[pk(to,from)]>=30)return `${B.name} already likes you. More gifts will not buy more friendship.`;
+  if(A.gold<amt)return 'Not enough gold.';
+  A.gold-=amt;B.gold+=amt;G.cd.set(key,G.t+45);
+  REL.op[pk(to,from)]+=5;B.grudge[from]=Math.max(0,B.grudge[from]-4);
+  return `${B.name} thanks you for the ${fmt(amt)} gold gift. Their opinion of you improves.`;
+}
+function propose(from,to,kind){
+  const X=G.nations[to],Y=G.nations[from];
+  const key=kind+':'+from+':'+to,cd=G.cd.get(key);
+  if(cd>G.t)return `${X.name} will not discuss this for ${Math.ceil(cd-G.t)}s.`;
+  const op=opinion(to,from),tr=treatyOf(from,to);
+  const refuse=m=>{G.cd.set(key,G.t+6);REL.op[pk(to,from)]-=1;return m+(op<25?' Try sending a gift first.':'')};
+  if(kind==='peace'){
+    if(!atWar(from,to))return 'You are not at war with them.';
+    const dur=G.t-REL.wsince[pk(from,to)],losing=X.troops<Y.troops*.9,stubborn=X.pers.aggr>1.1;
+    if(!(losing||op>(stubborn?-20:-60)||dur>(stubborn?40:12)))return refuse(`${X.name} wants to keep fighting.`);
+    makePeace(from,to);
+    let extra='';
+    if(losing){const t=Math.round(Math.min(X.gold*.5,60+Math.sqrt(X.tiles)*4));if(t>0){X.gold-=t;Y.gold+=t;extra=` ${X.name} pays ${t} gold.`}}
+    return `${X.name} agrees to a ceasefire for ${TRUCE_LEN}s.${extra}`;
+  }
+  if(atWar(from,to))return 'End the war first.';
+  if(kind==='trade'){
+    if(tr)return 'You already have an agreement with them.';
+    if(Y.infamy>=50)return refuse(`${X.name} does not trust a rogue state.`);
+    if(REL.riv[pk(from,to)])return refuse(`${X.name} will not sign anything while your dispute is open. Settle it first.`);
+    if(op<(X.pers.aggr>1.1?25:10))return refuse(`${X.name} is not interested right now.`);
+    setTreaty(from,to,1);return `${X.name} signs a trade deal. Both of you earn more.`;
+  }
+  if(kind==='alliance'){
+    if(tr===2)return 'You are already allied.';
+    if(tr!==1)return 'Sign a trade deal first.';
+    const age=G.t-REL.tsince[pk(from,to)];
+    if(age<90)return `Too soon. Let the trade deal run ${Math.ceil(90-age)}s more.`;
+    if(Y.infamy>=45)return refuse(`${X.name} does not trust you enough for an alliance.`);
+    if(Y.tiles/G.land>.4&&op<50)return refuse(`${X.name} fears your power.`);
+    if(allyCount(X)>=(from===0?3:2))return refuse(`${X.name} already has too many allies.`);
+    if(op<50)return refuse(`${X.name} wants a much warmer relationship first.`);
+    setTreaty(from,to,2);return `${X.name} joins you in an alliance.`;
+  }
+  return '';
+}
+const mendCost=()=>Math.max(300,giftAmount()*8);
+const giftAmount=()=>Math.max(50,Math.round(Math.max(1,goldRate(P()))*10/10)*10);
+function dipDo(kind,t){
+  const X=G.nations[t],p=P();
+  if(G.over||!p.alive||!X.alive)return 'That is not possible now.';
+  if(kind==='war'){const r=declareWar(0,t);return r||`War declared on ${X.name}. Close this panel and click their land to attack.`}
+  if(kind==='peace'||kind==='trade'||kind==='alliance')return propose(0,t,kind);
+  if(kind==='mend'){
+    if(!REL.riv[pk(0,t)])return 'There is no dispute to settle.';
+    if(atWar(0,t))return 'End the war first.';
+    const c=mendCost();if(p.gold<c)return `Settling the dispute costs ${fmt(c)} gold.`;
+    p.gold-=c;const txt=REL.rivText.get(pk(0,t));
+    setSym(REL.riv,0,t,0);REL.rivText.delete(pk(0,t));REL.rivText.delete(pk(t,0));
+    REL.op[pk(t,0)]+=20;REL.op[pk(0,t)]+=20;X.tens[0]=0;p.tens[t]=0;X.grudge[0]=0;
+    return `You settled ${txt} with ${X.name}. Relations improve somewhat.`;
+  }
+  if(kind==='nukepact'){
+    if(atWar(0,t))return 'End the war first.';
+    if(REL.pact[pk(0,t)])return 'You already have a nuclear deal.';
+    const key='pact:'+t,cd=G.cd.get(key);if(cd>G.t)return `${X.name} will not discuss this for ${Math.ceil(cd-G.t)}s.`;
+    if(opinion(t,0)<(X.pers.aggr>1.1?-40:-60)){G.cd.set(key,G.t+8);return `${X.name} does not trust you enough for a nuclear deal. Try a gift or settling the dispute first.`}
+    setSym(REL.pact,0,t,1);REL.op[pk(t,0)]+=30;REL.op[pk(0,t)]+=30;X.tens[0]=0;p.tens[t]=0;
+    return `Nuclear deal signed with ${X.name}: no nuclear strikes between you, and tensions drop.`;
+  }
+  if(kind==='endpact'){
+    if(!REL.pact[pk(0,t)])return 'There is no nuclear deal.';
+    setSym(REL.pact,0,t,0);p.infamy+=6;REL.op[pk(t,0)]-=15;
+    return `You cancelled the nuclear deal with ${X.name}.`;
+  }
+  if(kind==='end')return endTreaty(0,t);
+  if(kind==='gift')return giftTo(0,t,giftAmount());
+  return '';
+}
+function aiTreaties(n){
+  if(Math.random()>.03)return;
+  const c=G.nations.filter(d=>d.alive&&d.id!==n.id&&!ctl(d)&&!atWar(n.id,d.id)&&opinion(n.id,d.id)>=15&&opinion(d.id,n.id)>=15);
+  if(!c.length)return;
+  const d=c[Math.floor(Math.random()*c.length)],tr=treatyOf(n.id,d.id);
+  if(tr===0)setTreaty(n.id,d.id,1);
+  else if(tr===1&&G.t-REL.tsince[pk(n.id,d.id)]>=150&&allyCount(n)<2&&allyCount(d)<2&&n.pers.aggr<1.2&&opinion(n.id,d.id)>45&&opinion(d.id,n.id)>45)setTreaty(n.id,d.id,2);
+}
+function diploTick(){
+  for(const a of G.nations){
+    if(!a.alive)continue;
+    a.infamy=Math.max(0,a.infamy-.2);
+    for(const b of G.nations){
+      if(!b.alive||b.id===a.id)continue;
+      const k=pk(a.id,b.id);
+      if(REL.war[k])REL.op[k]=Math.max(-80,REL.op[k]-.12);
+      else{
+        const cap=Math.max(REL.pact[k]?25:-99,REL.treaty[k]===2?90:REL.treaty[k]===1?60:REL.riv[k]?-30:35);
+        if(REL.op[k]<cap)REL.op[k]=Math.min(cap,REL.op[k]+(REL.treaty[k]?.08:.06));else REL.op[k]=Math.max(cap,REL.op[k]-.1);
+      }
+    }
+  }
+  if(G.event&&G.t>=G.event.exp)resolveEvent(G.event.def,true);
+  if(!G.event&&G.evq.length)actEvent(G.evq.shift());
+  if(!G.event&&!auto&&P().alive){
+    if(G.t>=G.nextOffer){G.nextOffer=G.t+25+Math.random()*25;if(Math.random()<.65)aiOffer()}
+    if(!G.event&&G.t>=G.nextEvent){G.nextEvent=G.t+80+Math.random()*50;genEvent()}
+  }
+}
+
+/* ---------- president decisions and AI offers ---------- */
+function actEvent(ev){ev.id=++G.evid;ev.exp=G.t+(ev.len||30);if(ev.def===undefined)ev.def=ev.opts.length-1;G.event=ev}
+function pushEvent(ev){if(G.event)G.evq.push(ev);else actEvent(ev)}
+function allyCall(a,b,why){
+  const A=G.nations[a],B=G.nations[b];
+  pushEvent({title:`${B.name} is under attack`,text:`${A.name} declared war on your ally ${B.name}${why?' over '+why:''}. Allies expect help. Do you join the war?`,def:1,len:45,opts:[
+    {label:`Join the war against ${A.name}`,fn:()=>{
+      if(!A.alive||!B.alive)return 'The war was already over.';
+      if(atWar(0,a))return `You are already at war with ${A.name}.`;
+      const r=declareWar(0,a,true,`its attack on ${B.name}`);
+      if(r)return r;
+      REL.op[pk(b,0)]+=15;return `You joined the war to defend ${B.name}. Click ${A.name} land to attack.`}},
+    {label:'Stay out of it',fn:()=>{REL.op[pk(b,0)]-=12;return `You stayed out. ${B.name} is disappointed.`}}]});
+}
+function resolveEvent(i,timeout){
+  const ev=G.event;if(!ev)return 'No decision is pending.';
+  const p=P();
+  if(timeout&&ev.def<0){G.event=null;G.nextEvent=Math.max(G.nextEvent,G.t+30);log(`${ev.title}: you let it pass.`);return ''}
+  const o=ev.opts[timeout?ev.def:i];
+  if(!timeout&&o.need&&p.gold<o.need)return 'Not enough gold.';
+  if(o.need&&!timeout)p.gold-=o.need;
+  G.event=null;G.nextEvent=Math.max(G.nextEvent,G.t+30);
+  const out=o.fn?o.fn():'';
+  log((timeout?'No answer, so: ':'')+(out||o.label),timeout?'':'me');
+  return '';
+}
+const eventRate=()=>Math.max(1,goldRate(P()));
+const scaleG=()=>Math.max(80,Math.round(eventRate()*25/10)*10);
+function genEvent(){
+  const p=P(),S=scaleG(),cap=troopCap(p),room=Math.max(0,cap-p.troops);
+  const adj=aiBorders(p),bonus=Math.max(2,Math.round(eventRate()*.12));
+  const nb=G.nations.filter(x=>x.alive&&x.id!==0&&adj[x.id+1]>0&&treatyOf(0,x.id)!==2&&!atWar(0,x.id));
+  const cl=v=>Math.max(0,Math.min(100,v));
+  const pool=[];
+  pool.push(()=>({title:'Dockworkers walk out',text:'The unions demand higher pay and threaten to shut the ports.',def:2,opts:[
+    {label:`Raise wages (${fmt(S)} gold)`,need:S,fn:()=>{p.approval=cl(p.approval+10);return 'You raised wages. Approval +10.'}},
+    {label:'Send in the army',fn:()=>{p.approval=cl(p.approval-10);p.infamy+=5;return 'You broke the strike by force. Approval -10 and your reputation suffers.'}},
+    {label:'Ignore them',fn:()=>{p.approval=cl(p.approval-4);return 'The strike drags on. Approval -4.'}}]}));
+  pool.push(()=>({title:'Foreign investors',text:'A consortium offers a large payment for a stake in your ports. Voters will not like it.',def:1,opts:[
+    {label:`Accept (+${fmt(S*3)} gold, approval -6)`,fn:()=>{p.gold+=S*3;p.approval=cl(p.approval-6);return `You sold a stake in the ports for ${fmt(S*3)} gold. Approval -6.`}},
+    {label:'Decline',fn:()=>'You turned the investors away.'}]}));
+  pool.push(()=>({title:'Oil discovered',text:'Surveyors found oil under your land.',def:-1,opts:[
+    {label:`Fund drilling (${fmt(S)} gold) for +${bonus} gold/s forever`,need:S,fn:()=>{p.bonusGold+=bonus;return `The wells are pumping: +${bonus} gold/s for good.`}},
+    {label:`Sell the rights (+${fmt(S*2)} gold)`,fn:()=>{p.gold+=S*2;return `You sold the oil rights for ${fmt(S*2)} gold.`}}]}));
+  pool.push(()=>({title:'Bad harvest',text:'The crops failed and bread is scarce.',def:1,opts:[
+    {label:`Import grain (${fmt(S)} gold)`,need:S,fn:()=>{p.approval=cl(p.approval+2);return 'Grain shipments calm the cities. Approval +2.'}},
+    {label:'Ration supplies',fn:()=>{p.approval=cl(p.approval-8);p.troops*=.92;return 'Rationing begins. Approval -8, troops -8%.'}}]}));
+  pool.push(()=>({title:'Cabinet scandal',text:'A minister was caught taking bribes.',def:1,opts:[
+    {label:`Cover it up (${fmt(Math.round(S*.8))} gold)`,need:Math.round(S*.8),fn:()=>{p.infamy+=6;return 'The story disappears. Your reputation slips a little.'}},
+    {label:'Come clean and fire him',fn:()=>{p.approval=cl(p.approval-8);return 'You fired the minister in public. Approval -8.'}}]}));
+  if(room>cap*.1)pool.push(()=>({title:'Army parade',text:'The generals want a victory parade to recruit volunteers.',def:1,opts:[
+    {label:`Fund it (${fmt(S)} gold)`,need:S,fn:()=>{const add=Math.min(room,cap*.12);p.troops+=add;p.approval=cl(p.approval+6);return `Volunteers flood in: +${fmt(add)} troops, approval +6.`}},
+    {label:'Skip it',fn:()=>'No parade this year.'}]}));
+  pool.push(()=>({title:'Trade fair',text:'Merchants ask you to host a fair in the capital.',def:1,opts:[
+    {label:`Host it (${fmt(S)} gold)`,need:S,fn:()=>{const g=Math.round(S*(1.1+Math.random()*1.4));p.gold+=g;p.approval=cl(p.approval+4);return `The fair earned ${fmt(g)} gold. Approval +4.`}},
+    {label:'Skip it',fn:()=>'No fair this year.'}]}));
+  if(p.tax>=.35)pool.push(()=>({title:'Merchants complain',text:'Shopkeepers say your taxes are choking trade.',def:1,opts:[
+    {label:'Cut taxes by 5 points',fn:()=>{p.tax=Math.max(0,p.tax-.05);p.approval=cl(p.approval+4);return 'You cut taxes by 5 points. Approval +4.'}},
+    {label:'Hold firm',fn:()=>{p.approval=cl(p.approval-4);return 'The merchants grumble. Approval -4.'}}]}));
+  if(nb.length){
+    const x=nb[Math.floor(Math.random()*nb.length)];
+    pool.push(()=>({title:'Border incident',text:`${x.name} patrols crossed your border.`,def:1,opts:[
+      {label:'Protest loudly',fn:()=>{REL.op[pk(x.id,0)]-=10;p.approval=cl(p.approval+4);return `You protested. ${x.name} likes you less, voters cheer (+4).`}},
+      {label:'Let it pass',fn:()=>{p.approval=cl(p.approval-3);return 'Voters think you are weak. Approval -3.'}}]}));
+  }
+  pushEvent(pool[Math.floor(Math.random()*pool.length)]());
+}
+function aiOffer(){
+  if(G.event)return false;
+  const p=P();if(!p.alive)return false;
+  for(const x of shuffle(G.nations.filter(d=>d.alive&&d.id!==0))){
+    const id=x.id,op=opinion(id,0),tr=treatyOf(0,id),cdk=t=>G.cd.get(t+':'+id)>G.t;
+    if(atWar(id,0)){
+      const dur=G.t-REL.wsince[pk(0,id)];
+      if(dur>45&&x.troops<p.troops*.8&&!cdk('offerpeace')){
+        const tribute=Math.round(Math.min(x.gold*.5,60+Math.sqrt(x.tiles)*4));
+        G.cd.set('offerpeace:'+id,G.t+80);
+        pushEvent({title:`${x.name} asks for a ceasefire`,text:`Their army is spent.${tribute>20?` They offer ${fmt(tribute)} gold to end the war.`:''}`,def:1,len:35,opts:[
+          {label:'Accept the ceasefire',fn:()=>{if(!atWar(id,0))return 'The war had already ended.';makePeace(0,id);const t=Math.min(tribute,x.gold);if(t>20){x.gold-=t;p.gold+=t}return `Ceasefire with ${x.name}${t>20?`, +${fmt(t)} gold`:''}.`}},
+          {label:'Keep fighting',fn:()=>`You refused ${x.name}'s offer.`}]});
+        return true;
+      }
+      continue;
+    }
+    if(tr===0&&op>30&&p.infamy<50&&!cdk('offertrade')){
+      G.cd.set('offertrade:'+id,G.t+90);
+      pushEvent({title:`${x.name} proposes a trade deal`,text:'They want to open their markets to you. Both sides earn more gold.',def:1,len:35,opts:[
+        {label:'Sign the deal',fn:()=>{if(!x.alive||atWar(0,id)||treatyOf(0,id))return 'That offer is no longer valid.';setTreaty(0,id,1);return `Trade deal signed with ${x.name}.`}},
+        {label:'Decline',fn:()=>`You declined ${x.name}'s offer.`}]});
+      return true;
+    }
+    if(tr===1&&op>60&&G.t-REL.tsince[pk(0,id)]>=150&&allyCount(x)<2&&p.infamy<35&&!cdk('offerally')){
+      G.cd.set('offerally:'+id,G.t+120);
+      pushEvent({title:`${x.name} proposes an alliance`,text:'Allies will not attack you and join your wars. Your alliance bloc counts toward a diplomatic victory.',def:1,len:40,opts:[
+        {label:'Join the alliance',fn:()=>{if(!x.alive||atWar(0,id)||treatyOf(0,id)!==1)return 'That offer is no longer valid.';setTreaty(0,id,2);return `Alliance signed with ${x.name}.`}},
+        {label:'Decline',fn:()=>`You declined ${x.name}'s offer.`}]});
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ---------- land attacks ---------- */
+function nearPost(j,defId){
+  const x=j%MW,y=(j/MW)|0;let m=1;
+  for(const b of G.blds)if(b.type==='post'&&b.owner===defId&&Math.hypot(b.x-x,b.y-y)<=POST_R*(1+.25*(b.lv-1)))m=Math.max(m,1.8+.35*(b.lv-1));
+  return m;
+}
+function hasFrontier(atk,def){
+  for(let i=0;i<N;i++){
+    if(owner[i]!==atk)continue;
+    const x=i%MW,y=(i/MW)|0;
+    if(x>0&&terr[i-1]&&owner[i-1]===def)return true;
+    if(x<MW-1&&terr[i+1]&&owner[i+1]===def)return true;
+    if(y>0&&terr[i-MW]&&owner[i-MW]===def)return true;
+    if(y<MH-1&&terr[i+MW]&&owner[i+MW]===def)return true;
+    if(LK[i]){for(const j of LINK.get(i))if(owner[j]===def)return true}
+  }
+  return false;
+}
+function launchAttack(atk,def,troops){
+  const n=G.nations[atk];
+  troops=Math.min(Math.floor(troops),Math.floor(n.troops));
+  if(troops<5)return 'Not enough troops to send.';
+  if(def>=0&&!atWar(atk,def))return `You are not at war with ${G.nations[def].name}. Open Diplomacy (P) to declare war.`;
+  if(!hasFrontier(atk,def))return atk===0?'No land border with them. Build a Port, then use the Navy tab to invade by sea.':'Your land does not border that.';
+  n.troops-=troops;
+  if(def>=0){const d=G.nations[def];d.grudge[atk]=Math.min(60,d.grudge[atk]+3);G.dbg.warAtk++}else G.dbg.neutAtk++;
+  const ex=G.attacks.find(a=>a.atk===atk&&a.def===def);
+  if(ex)ex.troops+=troops;else G.attacks.push({atk,def,troops,acc:0,front:null,rescan:0});
+  if(def===0&&atk!==0&&!auto&&!ex&&intelLv()>=2)log(`${n.name} attacks you with ${fmt(troops)} troops.`,'hit');
+  return '';
+}
+const defForce=d=>d.troops+.5*G.attacks.reduce((c,a)=>a.atk===d.id?c+a.troops:c,0);
+function endAttack(a){
+  if(a.atk===0&&a.got>=3&&G.attacks.includes(a))log(`Attack finished: ${a.got} tiles taken${a.def>=0?' from '+G.nations[a.def].name:''}.`,'good');
+  G.nations[a.atk].troops+=a.troops;
+  G.attacks=G.attacks.filter(x=>x!==a);
+}
+function scanFront(atk,def){
+  const f=[];
+  for(let i=0;i<N;i++){
+    if(owner[i]!==atk)continue;
+    const x=i%MW,y=(i/MW)|0;
+    let ok=(x>0&&terr[i-1]&&owner[i-1]===def)||(x<MW-1&&terr[i+1]&&owner[i+1]===def)||(y>0&&terr[i-MW]&&owner[i-MW]===def)||(y<MH-1&&terr[i+MW]&&owner[i+MW]===def);
+    if(!ok&&LK[i]){for(const j of LINK.get(i))if(owner[j]===def){ok=true;break}}
+    if(ok)f.push(i);
+  }
+  return f;
+}
+function stepAttacks(dt){
+  for(const a of G.attacks.slice()){
+    if(!G.attacks.includes(a))continue;
+    const atk=G.nations[a.atk];
+    if(!atk.alive){G.attacks=G.attacks.filter(x=>x!==a);continue}
+    if(a.def>=0&&!G.nations[a.def].alive){endAttack(a);continue}
+    a.rescan-=dt;
+    if(!a.front||a.rescan<=0||!a.front.length){a.front=scanFront(a.atk,a.def);a.rescan=2}
+    if(!a.front.length){endAttack(a);continue}
+    const pw=a.def>=0?clamp(Math.pow(a.troops/Math.max(300,defForce(G.nations[a.def])),.6),.5,3):1;
+    a.acc+=Math.min(a.def>=0?20*pw:40,(5+Math.sqrt(a.troops)*1.3)*ATK*pw)*dt;
+    let n=Math.floor(a.acc);a.acc-=n;
+    const def=a.def>=0?G.nations[a.def]:null;
+    let ended=false,guard=n*4+20;
+    while(n>0&&a.front.length&&guard-->0){
+      const fi=Math.floor(Math.random()*a.front.length),f=a.front[fi];
+      let j=-1;
+      if(owner[f]===a.atk){
+        const x=f%MW,y=(f/MW)|0,opts=[];
+        if(x>0&&terr[f-1]&&owner[f-1]===a.def)opts.push(f-1);
+        if(x<MW-1&&terr[f+1]&&owner[f+1]===a.def)opts.push(f+1);
+        if(y>0&&terr[f-MW]&&owner[f-MW]===a.def)opts.push(f-MW);
+        if(y<MH-1&&terr[f+MW]&&owner[f+MW]===a.def)opts.push(f+MW);
+        if(LK[f]){for(const j of LINK.get(f))if(owner[j]===a.def)opts.push(j)}
+        if(opts.length)j=opts[Math.floor(Math.random()*opts.length)];
+      }
+      if(j<0){a.front[fi]=a.front[a.front.length-1];a.front.pop();continue}
+      n--;
+      const tm=TMUL[terr[j]];let cost;
+      if(!def)cost=.9*tm+.3;
+      else{
+        const dens=Math.max(1,defForce(def)/Math.max(1,def.tiles));
+        cost=dens*.9*tm*nearPost(j,def.id)+1;
+        def.troops=Math.max(0,def.troops-(dens*.9+1)*.85);
+        def.grudge[a.atk]=Math.min(60,def.grudge[a.atk]+.7);def.hitT=G.t;
+      }
+      if(def)cost*=clamp(Math.pow(defForce(def)/Math.max(300,a.troops),.35),.6,1.6);
+      if(def&&orig[j]===a.atk)cost*=.35;
+      if(a.troops<cost){if(a.atk===0)log(`Your attack${def?' on '+def.name:''} ran out of troops after taking ${a.taken||0} tiles. Send more, or hit weaker land.`,'hit');endAttack(a);ended=true;break}
+      a.troops-=cost;a.taken=(a.taken||0)+1;
+      setOwner(j,a.atk);a.front.push(j);a.got=(a.got||0)+1;
+      if(def&&def.tiles<=0){eliminate(def);break}
+    }
+    if(!ended&&G.attacks.includes(a)&&a.troops<1)endAttack(a);
+  }
+}
+
+/* ---------- naval landings ---------- */
+const bfsPar=new Int32Array(N),bfsStamp=new Int32Array(N),bfsQ=new Int32Array(N);let bfsT=0;
+function seaPath(nid,target){
+  bfsT++;
+  const tx=target%MW,ty=(target/MW)|0,goal=new Set();
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=tx+dx,yy=ty+dy;if(xx<0||yy<0||xx>=MW||yy>=MH)continue;const j=yy*MW+xx;if(!terr[j])goal.add(j)}
+  if(!goal.size)return null;
+  let qh=0,qt=0;
+  for(const b of G.blds){
+    if(b.owner!==nid||b.type!=='port')continue;
+    const x=b.x,y=b.y;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=MW||yy>=MH)continue;const j=yy*MW+xx;if(!terr[j]&&bfsStamp[j]!==bfsT){bfsStamp[j]=bfsT;bfsPar[j]=-1-b.i;bfsQ[qt++]=j}}
+  }
+  let end=-1;
+  while(qh<qt){
+    const w=bfsQ[qh++];
+    if(goal.has(w)){end=w;break}
+    const x=w%MW,y=(w/MW)|0;
+    if(x>0&&!terr[w-1]&&bfsStamp[w-1]!==bfsT){bfsStamp[w-1]=bfsT;bfsPar[w-1]=w;bfsQ[qt++]=w-1}
+    if(x<MW-1&&!terr[w+1]&&bfsStamp[w+1]!==bfsT){bfsStamp[w+1]=bfsT;bfsPar[w+1]=w;bfsQ[qt++]=w+1}
+    if(y>0&&!terr[w-MW]&&bfsStamp[w-MW]!==bfsT){bfsStamp[w-MW]=bfsT;bfsPar[w-MW]=w;bfsQ[qt++]=w-MW}
+    if(y<MH-1&&!terr[w+MW]&&bfsStamp[w+MW]!==bfsT){bfsStamp[w+MW]=bfsT;bfsPar[w+MW]=w;bfsQ[qt++]=w+MW}
+  }
+  if(end<0)return null;
+  const rev=[];let w=end,port=-1;
+  for(;;){rev.push(w);const q=bfsPar[w];if(q<0){port=-1-q;break}w=q}
+  rev.reverse();
+  const pts=[{x:port%MW+.5,y:((port/MW)|0)+.5}];
+  for(let k=0;k<rev.length;k+=4)pts.push({x:rev[k]%MW+.5,y:((rev[k]/MW)|0)+.5});
+  pts.push({x:tx+.5,y:ty+.5});
+  let L=0;for(let k=1;k<pts.length;k++){L+=Math.hypot(pts[k].x-pts[k-1].x,pts[k].y-pts[k-1].y);pts[k].d=L}
+  pts[0].d=0;
+  return{pts,len:L};
+}
+function snapLand(i,r){
+  if(terr[i])return i;
+  const x=i%MW,y=(i/MW)|0;let best=-1,bd=1e9;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=MW||yy>=MH)continue;const j=yy*MW+xx;if(!terr[j])continue;const d=dx*dx+dy*dy;if(d<bd){bd=d;best=j}}
+  return best;
+}
+function launchNaval(nid,target,troops){
+  const n=G.nations[nid];
+  target=snapLand(target,4);
+  if(target<0)return 'Pick a coast to land on.';
+  const def=owner[target];
+  if(def===nid)return 'That is your own land.';
+  if(def>=0&&!atWar(nid,def))return `You are not at war with ${G.nations[def].name}. Open Diplomacy (P) to declare war.`;
+  if(n.cnt.port<1)return 'Build a Port on your coast first.';
+  if(!coastal(target)){
+    let b=-1,bd=1e9;const x=target%MW,y=(target/MW)|0;
+    for(let dy=-6;dy<=6;dy++)for(let dx=-6;dx<=6;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=MW||yy>=MH)continue;const j=yy*MW+xx;if(!terr[j]||owner[j]!==def||!coastal(j))continue;const d=dx*dx+dy*dy;if(d<bd){bd=d;b=j}}
+    if(b<0)return 'Ships need a beach. Click land near the coast.';
+    target=b;
+  }
+  const cap=600*n.lsum.port;
+  troops=Math.min(Math.floor(troops),Math.floor(n.troops),cap);
+  if(troops<20)return 'Not enough troops to send.';
+  const cost=Math.round(40+troops*.08);
+  if(n.gold<cost)return `The fleet costs ${cost} gold.`;
+  const path=seaPath(nid,target);
+  if(!path)return 'No sea route to that coast.';
+  n.gold-=cost;n.troops-=troops;
+  G.boats.push({owner:nid,def,troops,target,pts:path.pts,len:path.len,d:0,speed:SHIP_SPEED*(1+.15*(n.lsum.port-n.cnt.port))});
+  if(nid===0)log(`Fleet of ${fmt(troops)} troops sails for ${def>=0?G.nations[def].name:'unclaimed'} land (${Math.ceil(path.len/SHIP_SPEED)}s).`,'me');
+  else if(def===0)log(`${n.name} fleet of ${fmt(troops)} troops heading for your coast, ${Math.ceil(path.len/SHIP_SPEED)}s away! Sink it: Navy tab, or Coastal batteries.`,'hit');
+  return '';
+}
+function boatPos(b){
+  const pts=b.pts;let k=1;
+  while(k<pts.length-1&&pts[k].d<b.d)k++;
+  const a=pts[k-1],c=pts[k],f=c.d>a.d?Math.min(1,Math.max(0,(b.d-a.d)/(c.d-a.d))):1;
+  return{x:a.x+(c.x-a.x)*f,y:a.y+(c.y-a.y)*f,ang:Math.atan2(c.y-a.y,c.x-a.x)};
+}
+const BAT_R=30,ANTISHIP=70;
+function sinkBoat(k,by,how){
+  const bt=G.boats[k],o=G.nations[bt.owner],d=G.nations[by],ps=boatPos(bt);
+  G.boats.splice(k,1);fxBoom(Math.round(ps.x),Math.round(ps.y),3);
+  if(by===0)log(`You sank a ${o.name} fleet carrying ${fmt(bt.troops)} troops!`,'good');
+  else if(bt.owner===0)log(`Your fleet of ${fmt(bt.troops)} troops was sunk by ${d.name}.`,'hit');
+  else if(bt.def===0)log(`${d.name} sank a ${o.name} fleet that was heading for you.`,'good');
+}
+function defendSeas(){
+  for(let k=G.boats.length-1;k>=0;k--){
+    const bt=G.boats[k],ps=boatPos(bt);
+    for(const b of G.blds){
+      if(b.owner===bt.owner||!atWar(bt.owner,b.owner))continue;
+      let R,p;
+      if(b.type==='battery'){R=BAT_R+6*(b.lv-1);p=.22+.08*b.lv}
+      else if(b.type==='port'){R=20;p=.1}
+      else if(b.type==='air'){const f=G.nations[b.owner].fighters;if(f<=0)continue;R=26;p=Math.min(.2,.04*Math.min(3,f))*FIGHT_SKILL[b.lv-1]}
+      else continue;
+      if(G.t<(b.nx||0)||Math.hypot(b.x-ps.x,b.y-ps.y)>R)continue;
+      b.nx=G.t+1.2;
+      if(Math.random()<p){sinkBoat(k,b.owner);break}
+    }
+  }
+}
+function sinkShip(nid,x,y){
+  const n=G.nations[nid];let bi=-1,bd=7;
+  G.boats.forEach((bt,k)=>{if(bt.owner===nid||!atWar(nid,bt.owner))return;const ps=boatPos(bt),d=Math.hypot(ps.x-x,ps.y-y);if(d<bd){bd=d;bi=k}});
+  if(bi<0)return 'No enemy ship there. Click right on a ship that is at war with you.';
+  if(n.cnt.silo<1)return 'Needs a missile silo.';
+  const s=G.blds.find(b=>b.owner===nid&&b.type==='silo'&&b.ready<=G.t);
+  if(!s)return 'Silos are reloading.';
+  if(n.gold<ANTISHIP)return `Anti-ship missile costs ${ANTISHIP} gold.`;
+  s.ready=G.t+6;n.gold-=ANTISHIP;
+  if(Math.random()<.8){sinkBoat(bi,nid);return ''}
+  return 'The missile missed the ship. Try again.';
+}
+function stepBoats(dt){
+  for(let i=G.boats.length-1;i>=0;i--){
+    const b=G.boats[i],n=G.nations[b.owner];
+    if(!n.alive){G.boats.splice(i,1);continue}
+    b.d+=b.speed*dt;
+    if(b.d<b.len)continue;
+    G.boats.splice(i,1);
+    const cur=owner[b.target];
+    if(cur===b.owner||(cur>=0&&!atWar(b.owner,cur))||!G.nations[cur>=0?cur:b.owner].alive){
+      n.troops+=b.troops;
+      if(b.owner===0)log('The fleet turned back: the target is no longer valid.');
+      continue;
+    }
+    const tx=b.target%MW,ty=(b.target/MW)|0,def=cur>=0?G.nations[cur]:null;
+    let got=0;
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+      if(Math.hypot(dx,dy)>2.3)continue;
+      const x=tx+dx,y=ty+dy;if(x<0||y<0||x>=MW||y>=MH)continue;
+      const j=y*MW+x;if(!terr[j]||owner[j]!==cur)continue;
+      if(def){def.troops=Math.max(0,def.troops-Math.max(1,def.troops/Math.max(1,def.tiles))*.5);def.grudge[b.owner]=Math.min(60,def.grudge[b.owner]+.7)}
+      setOwner(j,b.owner);got++;
+    }
+    fxPing(tx,ty);
+    if(def&&def.tiles<=0){eliminate(def)}
+    if(b.owner===0)log(`Beachhead established: ${got} tiles taken.`,'good');
+    else if(cur===0)log(`${n.name} landed troops on your coast!`,'hit');
+    if(!got){n.troops+=b.troops;continue}
+    const ex=G.attacks.find(a=>a.atk===b.owner&&a.def===cur);
+    if(ex)ex.troops+=b.troops;else G.attacks.push({atk:b.owner,def:cur,troops:b.troops,acc:0,front:null,rescan:0});
+  }
+}
+function aiNaval(n,adj){
+  if(n.cnt.port<1||n.troops<150)return;
+  for(const d of G.nations){
+    if(!d.alive||!atWar(n.id,d.id)||(adj[d.id+1]||0)>0)continue;
+    if(G.boats.some(b=>b.owner===n.id&&b.def===d.id)||G.attacks.some(a=>a.atk===n.id&&a.def===d.id))continue;
+    let t=-1;
+    for(let k=0;k<500&&t<0;k++){const i=Math.floor(Math.random()*N);if(owner[i]===d.id&&terr[i]&&coastal(i))t=i}
+    if(t<0)continue;
+    const avail=n.troops-troopCap(n)*.15;
+    if(avail>100)launchNaval(n.id,t,Math.min(avail*.5,d.troops*.8+80));
+    return;
+  }
+}
+
+/* ---------- missiles, bombers, impacts ---------- */
+function fxBoom(x,y,r){G.fx.push({k:'boom',x,y,r,t0:G.t,dur:.9})}
+function fxPing(x,y){G.fx.push({k:'ping',x,y,t0:G.t,dur:.7})}
+function rollIntercept(att,x0,y0,x1,y1,p,pf){
+  const S=16;let best=null;
+  for(const b of G.blds){
+    if(b.owner===att||b.type!=='sam'||b.ready>G.t||best||!atWar(att,b.owner))continue;
+    for(let k=5;k<=S;k++){
+      const f=k/S;
+      if(Math.hypot(x0+(x1-x0)*f-b.x,y0+(y1-y0)*f-b.y)<=SAM_R*(1+.2*(b.lv-1))){
+        b.ready=G.t+8/(1+.25*(b.lv-1));
+        if(Math.random()<Math.min(.95,p*SAM_SKILL[b.lv-1]))best={kill:true,f,by:b.owner};
+        break;
+      }
+    }
+  }
+  if(!best){
+    for(const b of G.blds){
+      if(b.owner===att||b.type!=='air'||best||b.ready>G.t||!atWar(att,b.owner))continue;
+      const dn=G.nations[b.owner];if(dn.fighters<=0)continue;
+      for(let k=4;k<=S;k++){
+        const f=k/S;
+        if(Math.hypot(x0+(x1-x0)*f-b.x,y0+(y1-y0)*f-b.y)<=FIGHTER_R){
+          b.ready=G.t+6/(1+.25*(b.lv-1));
+          for(let a=0;a<Math.min(2,dn.fighters);a++)if(Math.random()<pf*FIGHT_SKILL[b.lv-1]){best={kill:true,f,by:b.owner,fighter:true};break}
+          break;
+        }
+      }
+    }
+  }
+  return best||{kill:false,f:1};
+}
+function launchMissile(nid,key,tx,ty){
+  const n=G.nations[nid],M=MISSILES[key];
+  const to0=owner[ty*MW+tx];
+  if(to0>=0&&to0!==nid&&!atWar(nid,to0))return `Declare war on ${G.nations[to0].name} first (Diplomacy, P).`;
+  if((key==='nuke'||key==='nuclear')&&to0>=0&&REL.pact[pk(nid,to0)])return `Your nuclear deal with ${G.nations[to0].name} forbids nuclear strikes. End it first (Diplomacy).`;
+  if(n.cnt.silo<M.silos)return 'Needs '+M.silos+' silo'+(M.silos>1?'s':'')+'.';
+  if(n.gold<M.cost)return 'Not enough gold.';
+  let s=null,sd=1e9;
+  for(const b of G.blds){
+    if(b.owner!==nid||b.type!=='silo'||b.ready>G.t)continue;
+    const d=Math.hypot(b.x-tx,b.y-ty);if(d<sd){sd=d;s=b}
+  }
+  if(!s)return 'Silos are reloading.';
+  s.ready=G.t+M.cool*(1-.12*(s.lv-1));n.gold-=M.cost;
+  if(key==='nuke'||key==='nuclear'){
+    const big=key==='nuke';n.infamy+=big?25:15;
+    for(const o of G.nations)if(o.alive&&o.id!==nid)REL.op[pk(o.id,nid)]-=big?8:5;
+    if(nid===0)log('The world condemns your nuclear launch. Nations like you less.','hit');
+  }
+  for(let k=0;k<M.n;k++){
+    let x=tx,y=ty;
+    if(M.n>1){const a=Math.random()*6.283,d=Math.random()*M.spread;x=clamp(Math.round(tx+Math.cos(a)*d),0,MW-1);y=clamp(Math.round(ty+Math.sin(a)*d),0,MH-1)}
+    const dist=Math.hypot(x-s.x,y-s.y),dur=Math.max(1.2,dist/M.speed);
+    const fate=rollIntercept(nid,s.x,s.y,x,y,M.p,.3);
+    G.missiles.push({owner:nid,type:key,x0:s.x,y0:s.y,x1:x,y1:y,t0:G.t,dur,fate,r:M.r,kf:M.kf});
+  }
+  const to=owner[ty*MW+tx];
+  if(nid===0)log(`${M.name} launched.`,'me');
+  else if(to===0)log(`Incoming ${M.name} from ${n.name}!`,'hit');
+  return '';
+}
+function impact(att,cx,cy,r,kf){
+  const hit=new Map(),R=Math.ceil(r);
+  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+    const x=cx+dx,y=cy+dy;if(x<0||y<0||x>=MW||y>=MH)continue;
+    const d=Math.hypot(dx,dy);if(d>r)continue;
+    const i=y*MW+x;if(!terr[i])continue;
+    const fall=1-.45*(d/r),o=owner[i];
+    if(o===att)continue;
+    if(o>=0&&!atWar(att,o))continue;
+    if(o>=0){
+      const b=G.bat.get(i);
+      if(b&&Math.random()<.85*fall+.1)removeBuilding(b);
+      if(Math.random()<.9*fall){hit.set(o,(hit.get(o)||0)+1);setOwner(i,-1);scorch[i]=1;paintAround(i)}
+    }else if(Math.random()<.7){scorch[i]=1;paintAround(i)}
+  }
+  hit.forEach((c,o)=>{
+    const n=G.nations[o];if(!n.alive)return;
+    const frac=c/(n.tiles+c);
+    n.troops-=n.troops*Math.min(.55,frac*kf);
+    n.grudge[att]=Math.min(60,n.grudge[att]+c*.4);n.lastHit=G.t;
+    if(o===0)log(`Strike on your land at ${cx},${cy}. ${c} tiles lost.`,'hit');
+    if(n.tiles<=0)eliminate(n);
+  });
+  fxBoom(cx,cy,r);
+}
+function sortie(nid,tx,ty){
+  const n=G.nations[nid];
+  if(n.bombers<=0)return 'No bombers ready.';
+  let af=null,ad=1e9;
+  for(const b of G.blds){if(b.owner!==nid||b.type!=='air')continue;const d=Math.hypot(b.x-tx,b.y-ty);if(d<ad){ad=d;af=b}}
+  if(!af)return 'You need an airfield.';
+  const to1=owner[ty*MW+tx];
+  if(to1>=0&&to1!==nid&&!atWar(nid,to1))return `Declare war on ${G.nations[to1].name} first (Diplomacy, P).`;
+  n.bombers--;
+  const dur=Math.max(1.5,ad/BOMB_SPEED);
+  const fate=rollIntercept(nid,af.x,af.y,tx,ty,.35,.45);
+  G.bombers.push({owner:nid,x0:af.x,y0:af.y,x1:tx,y1:ty,t0:G.t,dur,fate,phase:'out'});
+  if(nid===0)log('Bomber sortie launched.','me');
+  else if(owner[ty*MW+tx]===0)log(`${n.name} bombers inbound!`,'hit');
+  return '';
+}
+const satCost=n=>Math.round(350*(1+.7*n.sats));
+const intelLv=()=>(G&&!auto)?Math.min(3,P().sats||0):3;
+function buySat(n){
+  if(n.sats>=3)return 'You already have the best intel network.';
+  const c=satCost(n);if(n.gold<c)return `A satellite costs ${c} gold.`;
+  n.gold-=c;n.sats++;
+  return ['Satellite launched. You can now see rough troop numbers for every nation.','Second satellite up. You now see exact troops and each nation\'s economy and buildings.','Third satellite up. You can now see war plans, tensions and get attack alerts.'][n.sats-1];
+}
+function troopTxt(n){
+  if(!n.alive)return '';
+  if(n.id===0||intelLv()>=2)return fmt(n.troops);
+  if(intelLv()<1)return '?';
+  const m=Math.pow(10,Math.max(0,String(Math.round(n.troops)).length-2));return '~'+fmt(Math.round(n.troops/m)*m);
+}
+function intentText(n){
+  if(atWar(n.id,0))return 'At war with you';
+  const t=Math.round(Math.max(0,n.tens[0])),rt=REL.rivText.get(pk(n.id,0));
+  if(treatyOf(n.id,0)||truceLeft(n.id,0)>0)return 'No plans against you';
+  if(t<15||(!rt&&opinion(n.id,0)>=-15&&t<40))return 'No plans against you';
+  return `${t>=100?'Ready to declare war on you':'Tension with you '+t+'%'}${rt?' over '+rt:' (border or power tensions)'}`;
+}
+function intelLine(n,lv){
+  let t=`Gold ${fmt(n.gold)} · cities ${n.cnt.city} · silos ${n.cnt.silo} · SAMs ${n.cnt.sam} · jets ${n.bombers+n.fighters}`;
+  if(lv>=3){
+    const foes=G.nations.filter(d=>d.alive&&d.id!==n.id&&atWar(n.id,d.id)).map(d=>d.name);
+    const hit=G.attacks.filter(a=>a.atk===n.id&&a.def===0).reduce((c,a)=>c+a.troops,0);
+    t+=` · ${intentText(n)}${foes.length?' · fighting '+foes.join(', '):''}${hit>0?' · attacking you with '+fmt(hit)+' troops':''}`;
+  }
+  return t;
+}
+function buyJet(nid,kind){
+  const n=G.nations[nid],J=JET[kind];
+  if(n.cnt.air<1)return 'Build an airfield first.';
+  if(jetsTotal(n)>=jetCap(n))return 'Hangars are full.';
+  if(n.gold<J.cost)return 'Not enough gold.';
+  n.gold-=J.cost;if(kind==='bomber')n.bombers++;else n.fighters++;
+  return '';
+}
+function recruit(nid,key){
+  const n=G.nations[nid],R=RECRUIT[key];
+  const room=troopCap(n)-n.troops;
+  if(room<R.n*.1)return 'Troop cap reached. Build cities or barracks, or take more land.';
+  const add=Math.min(R.n,room),cost=Math.ceil(R.cost*add/R.n);
+  if(n.gold<cost)return 'Not enough gold.';
+  n.gold-=cost;n.troops+=add;
+  if(nid===0)log(`Recruited ${fmt(add)} troops.`,'me');
+  return '';
+}
+function startDrive(nid){
+  const n=G.nations[nid];
+  if(driveOn(n))return 'A conscription drive is already running.';
+  if(n.gold<DRIVE_COST)return 'Not enough gold.';
+  n.gold-=DRIVE_COST;n.drive=G.t+DRIVE_LEN;
+  if(nid===0)log(`Conscription drive: troops grow ${DRIVE_MULT}x for ${DRIVE_LEN}s.`,'me');
+  return '';
+}
+function stepAir(){
+  for(let i=G.missiles.length-1;i>=0;i--){
+    const m=G.missiles[i],end=m.t0+m.dur*(m.fate.kill?m.fate.f:1);
+    if(G.t<end)continue;
+    G.missiles.splice(i,1);
+    if(m.fate.kill){
+      const f=m.fate.f;fxPing(m.x0+(m.x1-m.x0)*f,m.y0+(m.y1-m.y0)*f);
+      if(m.fate.by===0)log('Your defenses shot down a missile.','good');
+      else if(m.owner===0)log(`One of your missiles was shot down by ${G.nations[m.fate.by].name}.`,'hit');
+    }else impact(m.owner,Math.round(m.x1),Math.round(m.y1),m.r,m.kf);
+  }
+  for(let i=G.bombers.length-1;i>=0;i--){
+    const b=G.bombers[i];
+    if(b.phase==='out'){
+      const end=b.t0+b.dur*(b.fate.kill?b.fate.f:1);
+      if(G.t<end)continue;
+      if(b.fate.kill){
+        G.bombers.splice(i,1);
+        fxPing(b.x0+(b.x1-b.x0)*b.fate.f,b.y0+(b.y1-b.y0)*b.fate.f);
+        if(b.owner===0)log(`A bomber was shot down by ${G.nations[b.fate.by].name}.`,'hit');else if(b.fate.by===0)log('You shot down a bomber.','good');
+        const dn=G.nations[b.fate.by];if(b.fate.fighter&&dn&&Math.random()<.2&&dn.fighters>0)dn.fighters--;
+      }else{
+        impact(b.owner,Math.round(b.x1),Math.round(b.y1),BOMB_R,.9);
+        b.phase='back';b.t0=G.t;
+      }
+    }else if(G.t>=b.t0+b.dur){
+      G.bombers.splice(i,1);
+      const n=G.nations[b.owner];if(n.alive&&n.cnt.air>0)n.bombers++;
+    }
+  }
+  G.fx=G.fx.filter(f=>G.t<f.t0+f.dur);
+}
+
+/* ---------- AI: peaceful by default, fights for reasons ---------- */
+const AIon=n=>!n.human||auto;
+function ownTile(nid,pred){
+  for(let k=0;k<2500;k++){const i=Math.floor(Math.random()*N);if(owner[i]===nid&&terr[i]&&(!pred||pred(i)))return i}
+  const own=[];for(let i=0;i<N;i++)if(owner[i]===nid&&terr[i]&&(!pred||pred(i)))own.push(i);
+  return own.length?own[Math.floor(Math.random()*own.length)]:-1;
+}
+const interior=i=>{const x=i%MW,y=(i/MW)|0;const o=owner[i];return x>0&&y>0&&x<MW-1&&y<MH-1&&terr[i-1]&&terr[i+1]&&terr[i-MW]&&terr[i+MW]&&owner[i-1]===o&&owner[i+1]===o&&owner[i-MW]===o&&owner[i+MW]===o};
+const bordering=i=>{const x=i%MW,y=(i/MW)|0,o=owner[i];return(x>0&&terr[i-1]&&owner[i-1]>=0&&owner[i-1]!==o)||(x<MW-1&&terr[i+1]&&owner[i+1]>=0&&owner[i+1]!==o)||(y>0&&terr[i-MW]&&owner[i-MW]>=0&&owner[i-MW]!==o)||(y<MH-1&&terr[i+MW]&&owner[i+MW]>=0&&owner[i+MW]!==o)};
+function aiBorders(n){
+  const cnt=new Int32Array(G.nations.length+1);
+  for(let i=0;i<N;i++){
+    if(owner[i]!==n.id)continue;
+    const x=i%MW,y=(i/MW)|0;
+    if(x>0&&terr[i-1]&&owner[i-1]!==n.id)cnt[owner[i-1]+1]++;
+    if(x<MW-1&&terr[i+1]&&owner[i+1]!==n.id)cnt[owner[i+1]+1]++;
+    if(y>0&&terr[i-MW]&&owner[i-MW]!==n.id)cnt[owner[i-MW]+1]++;
+    if(y<MH-1&&terr[i+MW]&&owner[i+MW]!==n.id)cnt[owner[i+MW]+1]++;
+    if(LK[i]){for(const j of LINK.get(i))if(owner[j]!==n.id)cnt[owner[j]+1]++}
+  }
+  return cnt;
+}
+function cancelAttacksOn(a,d){G.attacks.filter(x=>x.atk===a&&x.def===d).forEach(endAttack)}
+const WHYTXT={revenge:'earlier attacks on them',border:'border tensions',leader:'the balance of power against a rising giant'};
+function aiDiplomacy(n,adj){
+  const D=DIFFS[diff];
+  for(const d of G.nations){
+    if(!d.alive||!atWar(n.id,d.id)){n.war[d.id]=0;continue}
+    if(REL.init[pk(n.id,d.id)]===n.id&&(G.t>n.war[d.id]||n.troops<d.troops*.7||d.tiles<REL.goal[pk(n.id,d.id)]*.75)){makePeace(n.id,d.id)}
+  }
+  if(G.nations.some(d=>n.war[d.id]>0))return;
+  let best=null,bs=0,reason='',txt='';
+  for(const d of G.nations){
+    if(!d.alive||d.id===n.id)continue;
+    const k=pk(n.id,d.id);
+    if(REL.treaty[k]||REL.pact[k]||truceLeft(n.id,d.id)>0||atWar(n.id,d.id)){n.tens[d.id]=0;continue}
+    const shared=adj[d.id+1]||0,op=opinion(n.id,d.id),riv=REL.riv[k]===1,g=n.grudge[d.id];
+    let r=0;
+    if(riv)r+=.45;
+    if(shared>=4&&op<-15)r+=.35;
+    if(shared>=4&&op<5&&d.tiles/G.land>.12&&d.tiles>n.tiles*1.3)r+=.2;
+    n.tens[d.id]=r>0?Math.min(150,n.tens[d.id]+r*D.think*n.pers.aggr*(D.opp/.8)):n.tens[d.id]>0?Math.max(0,n.tens[d.id]-D.think*.3):n.tens[d.id];
+    if(d.id===0&&!auto){if(n.tens[0]>=85&&!n.warned&&intelLv()>=3){n.warned=true;const rt0=REL.rivText.get(k);log(`Satellites: ${n.name} is preparing war on you${rt0?' over '+rt0:''}.`,'hit')}else if(n.tens[0]<40)n.warned=false}
+    if(G.t<D.peace)continue;
+    const ratio=n.troops/Math.max(1,d.troops);
+    if(g>8&&ratio>=.8&&(G.t>=n.cool[d.id]||g>40)&&5+g/10>bs){bs=5+g/10;best=d;reason='revenge';txt=WHYTXT.revenge}
+    const reach=shared>0||n.cnt.silo>0||n.cnt.air>0||n.cnt.port>0;
+    if(n.tens[d.id]>=100&&reach&&ratio>=(n.pers.aggr>1.1?.4:.7)){
+      const sc=4+n.tens[d.id]/50;
+      if(sc>bs){bs=sc;best=d;reason=riv?'rivalry':(shared>=4&&op<-15)?'border':'leader';txt=riv?REL.rivText.get(k):WHYTXT[reason]}
+    }
+  }
+  if(!best)return;
+  if(declareWar(n.id,best.id,false,txt)===''){
+    G.dbg.decl[reason]=(G.dbg.decl[reason]||0)+1;n.tens[best.id]=0;
+  }
+}
+function aiExpand(n,adj,cap){
+  if(adj[0]<=0||G.t<n.nextExp)return;
+  if(G.attacks.some(a=>a.atk===n.id&&a.def<0))return;
+  if(n.troops<Math.max(40,cap*.18))return;
+  const amt=Math.min(n.troops*(.3+Math.random()*.2),40+7*Math.sqrt(n.tiles));
+  if(!launchAttack(n.id,-1,amt))n.nextExp=G.t+8+Math.random()*10;
+}
+function aiWar(n,adj,cap){
+  for(const d of G.nations){
+    if(!(n.war[d.id]>0)||!d.alive||!(adj[d.id+1]>0))continue;
+    if(G.attacks.some(a=>a.atk===n.id&&a.def===d.id))continue;
+    const avail=n.troops-cap*.15;
+    if(avail>Math.max(60,d.troops*.5))launchAttack(n.id,d.id,Math.min(avail*.65,d.troops*1.5+60));
+  }
+}
+function aiBuild(n){
+  const c=n.cnt,P=n.pers,want=[];
+  if(c.city<clamp(Math.floor(n.tiles/200*P.build),1,18))want.push('city');
+  if(c.silo<1&&n.tiles>90)want.push('silo');
+  if(c.sam<1&&((n.lastHit>0&&G.t-n.lastHit<120)||G.t>200)&&n.tiles>90)want.push('sam');
+  if(c.air<1&&n.tiles>160)want.push('air');
+  if(c.barracks<Math.min(5,Math.floor(n.tiles/800))&&n.tiles>300)want.push('barracks');
+  if(c.market<Math.min(10,1+Math.floor(n.tiles/400))&&n.tiles>150)want.push('market');
+  if(c.mine<3&&n.tiles>250)want.push('mine');
+  if(c.battery<Math.min(3,Math.floor(n.tiles/1200)+(n.war.some(v=>v>0)?1:0))&&n.tiles>200&&G.t>=(n.noBat||0))want.push('battery');
+  if(c.port<Math.min(3,1+Math.floor(n.tiles/1500))&&n.tiles>90&&G.t>=n.noPort)want.push('port');
+  if(c.silo<2&&n.tiles>500)want.push('silo');
+  if(c.sam<Math.min(6,Math.floor(c.city/2)+1)&&n.tiles>300)want.push('sam');
+  if(c.post<Math.min(4,1+Math.floor(n.tiles/600))&&n.war.some(v=>v>0))want.push('post');
+  if(c.air<Math.min(3,1+Math.floor(n.tiles/900))&&n.tiles>500)want.push('air');
+  if(c.silo<3&&n.tiles>1500)want.push('silo');
+  for(const t of want){
+    if(n.gold<buildCost(n,t)+30)continue;
+    let i;
+    if(t==='silo'||t==='air')i=ownTile(n.id,q=>!G.bat.has(q)&&interior(q));
+    else if(t==='post')i=ownTile(n.id,q=>!G.bat.has(q)&&bordering(q));
+    else if(t==='mine'){if(G.t<n.noMine)continue;i=ownTile(n.id,q=>!G.bat.has(q)&&terr[q]===3);if(i<0){n.noMine=G.t+40;continue}}
+    else if(t==='battery'){i=ownTile(n.id,q=>!G.bat.has(q)&&coastal(q));if(i<0){n.noBat=G.t+120;continue}}
+    else if(t==='port'){i=ownTile(n.id,q=>!G.bat.has(q)&&coastal(q));if(i<0){n.noPort=G.t+60;continue}}
+    else i=ownTile(n.id,q=>!G.bat.has(q));
+    if(i>=0)tryBuild(n,t,i);
+    return;
+  }
+  if(G.t>=n.nextUp&&n.gold>500){
+    n.nextUp=G.t+10+Math.random()*10;
+    const mine2=G.blds.filter(b=>b.owner===n.id&&b.lv<MAXLV&&n.gold>=upCost(b)+250);
+    if(mine2.length){const b=mine2[Math.floor(Math.random()*mine2.length)];upgradeBuilding(n,b.i)}
+  }
+}
+function aiStrike(n){
+  const D=DIFFS[diff];
+  const foes=G.nations.filter(d=>d.alive&&d.id!==n.id&&atWar(n.id,d.id));
+  if(n.cnt.air>0&&G.t>=n.nextJet&&n.gold>=JET.bomber.cost+60){
+    n.nextJet=G.t+8;
+    if(foes.length||n.fighters<2)buyJet(n.id,(n.fighters<n.bombers||!foes.length)?'fighter':'bomber');
+  }
+  if(!foes.length)return;
+  const pickTarget=()=>{
+    const f=foes[Math.floor(Math.random()*foes.length)];
+    const bl=G.blds.filter(b=>b.owner===f.id);
+    const pri=bl.filter(b=>b.type==='silo'||b.type==='sam');
+    const pool=pri.length&&Math.random()<.5?pri:bl;
+    if(pool.length&&Math.random()<.7){const b=pool[Math.floor(Math.random()*pool.length)];return{x:b.x,y:b.y,f}}
+    const i=ownTile(f.id);if(i<0)return null;return{x:i%MW,y:(i/MW)|0,f};
+  };
+  if(n.bombers>0&&Math.random()<.4){const t=pickTarget();if(t)sortie(n.id,t.x,t.y)}
+  if(G.t<n.nextStrike||n.cnt.silo<1)return;
+  const t=pickTarget();if(!t)return;
+  const big=t.f.tiles/G.land>.3||n.grudge[t.f.id]>25;
+  let key=null;
+  if(n.cnt.silo>=2&&big&&n.gold>=MISSILES.nuke.cost+100&&Math.random()<D.nuke)key='nuke';
+  else if(n.cnt.silo>=1&&big&&n.gold>=MISSILES.nuclear.cost+120&&Math.random()<D.nuke*1.5)key='nuclear';
+  else if(n.gold>=MISSILES.mirv.cost+60&&Math.random()<.4)key='mirv';
+  else if(n.gold>=MISSILES.ballistic.cost+50)key='ballistic';
+  else if(n.gold>=MISSILES.cruise.cost+30)key='cruise';
+  if(!key)return;
+  if(!launchMissile(n.id,key,t.x,t.y))n.nextStrike=G.t+D.strike*(.8+Math.random()*.6);
+}
+function aiThink(n){
+  const D=DIFFS[diff];
+  n.aiT=D.think*(.7+Math.random()*.6);
+  for(let k=0;k<n.grudge.length;k++)n.grudge[k]=Math.max(0,n.grudge[k]-D.think*.35);
+  const cap=troopCap(n),adj=aiBorders(n);
+  if(adj[0]===0&&n.troops>cap*.6)n.amb+=D.think;else n.amb=Math.max(0,n.amb-D.think*2);
+  aiDiplomacy(n,adj);aiTreaties(n);aiExpand(n,adj,cap);aiWar(n,adj,cap);aiNaval(n,adj);aiBuild(n);aiStrike(n);
+}
+
+/* ---------- simulation ---------- */
+function step(dt){
+  G.t+=dt;
+  for(const n of G.nations){
+    if(!n.alive)continue;
+    const e=econ(n);
+    n.gold+=e.gross*dt;
+    if(n.debt>0){const pay=Math.min(n.debt,n.debtRate*dt,n.gold);n.gold-=pay;n.debt-=pay;if(n.debt<.5)n.debt=0}
+    const cap=troopCap(n);
+    if(n.troops<cap)n.troops=Math.min(cap,n.troops+troopGrowth(n)*dt);
+    else n.troops-=(n.troops-cap)*.1*dt;
+    if(ctl(n)&&G.phase==='play'){
+      const tg=approvalTarget(n);
+      n.approval+=clamp(tg-n.approval,-.5*dt,.5*dt);
+      if(n.approval<12){n.unrest+=dt;if(n.unrest>25)revolt(n)}else n.unrest=Math.max(0,n.unrest-dt*2);
+    }
+    if(AIon(n)&&G.phase==='play'){n.aiT-=dt;if(n.aiT<=0)aiThink(n)}
+  }
+  stepAttacks(dt);
+  stepBoats(dt);defendSeas();
+  stepAir();
+  if(G.t>=G.nextCheck){G.nextCheck=G.t+1;secondly()}
+}
+function secondly(){
+  const sx=new Float64Array(G.nations.length),sy=new Float64Array(G.nations.length),sc=new Int32Array(G.nations.length);
+  for(let i=0;i<N;i++){const o=owner[i];if(o>=0){sx[o]+=i%MW;sy[o]+=(i/MW)|0;sc[o]++}}
+  for(const n of G.nations){
+    if(n.alive&&n.spawned&&sc[n.id]===0&&G.phase==='play'){eliminate(n);continue}
+    if(sc[n.id]){n.cx=sx[n.id]/sc[n.id];n.cy=sy[n.id]/sc[n.id]}
+    while(jetsTotal(n)>jetCap(n)){if(n.fighters>0)n.fighters--;else if(n.bombers>0)n.bombers--;else break}
+  }
+  if(G.over||G.phase!=='play')return;
+  diploTick();
+  const alive=G.nations.filter(n=>n.alive);
+  if(!auto){
+    const pl=P();let al=0,share=pl.tiles;
+    for(const d of alive){if(d.id!==0&&treatyOf(0,d.id)===2){al++;share+=d.tiles}}
+    G.bloc=al?share/G.land:0;
+    G.blocT=(al&&pl.alive&&G.bloc>=BLOC_SHARE)?G.blocT+1:0;
+  }
+  let winner=null,why='';
+  for(const n of alive)if(n.tiles/G.land>=WIN_SHARE){winner=n;why=`${n.human?'You hold':n.name+' holds'} ${Math.round(n.tiles/G.land*100)}% of the land.`}
+  if(!winner&&G.blocT>=BLOC_TIME){winner=P();why=`Your alliance bloc holds ${Math.round(G.bloc*100)}% of the world.`}
+  if(!winner&&alive.length===1){winner=alive[0];why='Last nation standing.'}
+  if(!winner&&!G.nations[0].alive&&!auto){winner=alive[0]||null;why='Your nation fell.'}
+  if(winner||!alive.length){G.over={winner:winner?winner.id:-1,why};G.paused=true;showEnd()}
+}
+
+/* ---------- player actions ---------- */
+const P=()=>G.nations[0];
+function playerCan(){return G&&G.phase==='play'&&!G.over&&!G.paused&&P().alive}
+function describe(x,y){
+  const i=y*MW+x,t=terr[i];
+  if(!t)return `${x},${y} · Water`;
+  const o=owner[i],b=G.bat.get(i);
+  const rel=o>0?(atWar(0,o)?' · AT WAR':treatyOf(0,o)===2?' · ally':treatyOf(0,o)===1?' · trade partner':' · not at war (click to open Diplomacy)'):'';
+  let est='';
+  if(mode==='attack'&&o>0&&atWar(0,o)){const d=G.nations[o],dens=Math.max(1,d.troops/Math.max(1,d.tiles)),tr=P().troops*Number($('ratio').value)/100,c=dens*.9*TMUL[t]+1;est=intelLv()>=2?` · they hold ${dens.toFixed(1)} troops/tile: your ${fmt(tr)} troops take about ${Math.floor(tr/c)} tiles here`:' · buy satellites (Air tab) to see the odds';}
+  return `${x},${y} · ${TNAME[t]} · ${o<0?'Unclaimed':G.nations[o].name}${rel}${est}${(o>=0&&o!==0&&orig[i]===0)?' · your homeland: cheap to retake':''}${b?' · '+BUILD[b.type].name+' L'+b.lv:''}`;
+}
+function onTap(e){
+  if(!G)return;
+  const c=tileFromEvent(e);if(!c)return;
+  if(G.phase==='spawn'){trySpawn(c.x,c.y);refreshUI(true);return}
+  if(G.over)return;
+  if(G.paused){note='Paused. Press Space to resume.';refreshUI(true);return}
+  hideWarPrompt();
+  const i=c.y*MW+c.x,p=P();let msg='';
+  if(mode==='attack'){
+    const li=snapLand(i,4);
+    if(li<0)msg='That is water.';
+    else if(owner[li]===0)msg='That is your own land.';
+    else{
+      const tr=p.troops*Number($('ratio').value)/100,od=owner[li];
+      const go=()=>{let m=launchAttack(0,od,tr);if(m.startsWith('Your land does not border'))m=p.cnt.port>0?launchNaval(0,li,tr):'No land border there. Build a Port (Build tab), then click their coast to invade by sea.';return m};
+      msg=go();
+      if(msg.startsWith('You are not at war')&&od>0){showWarPrompt(od,go);msg=''}
+    }
+  }else if(mode==='u:up')msg=allIn?upgradeMany(p,i):upgradeBuilding(p,i);
+  else if(mode==='n:sink')msg=sinkShip(0,c.x+.5,c.y+.5);
+  else if(mode==='n:land')msg=launchNaval(0,i,p.troops*Number($('ratio').value)/100);
+  else if(mode.startsWith('b:'))msg=allIn?buildMany(p,mode.slice(2),i):tryBuild(p,mode.slice(2),i);
+  else if(mode.startsWith('m:')||mode==='j:bomber'){
+    const go=()=>mode==='j:bomber'?sortie(0,c.x,c.y):launchMissile(0,mode.slice(2),c.x,c.y);
+    msg=go();
+    if(/^(You are not at war|Declare war on)/.test(msg)&&owner[i]>0){showWarPrompt(owner[i],go);msg=''}
+  }
+  note=msg||'';
+  refreshUI(true);
+}
+let wpPending=null,wpTimer=0,wpId=0;
+function showWarPrompt(id,go){
+  const n=G.nations[id],tl=truceLeft(0,id),tr=treatyOf(0,id),rt=REL.rivText.get(pk(0,id));
+  wpPending=go;wpId=id;
+  $('wpTitle').textContent=`Not at war with ${n.name}`;
+  let t=tl>0?`A ceasefire still holds for ${Math.ceil(tl)}s, so you cannot declare war yet.`
+    :tr===2?`${n.name} is your ally. Declaring war breaks the alliance and costs you reputation.`
+    :tr===1?`You have a trade deal with ${n.name}. Declaring war cancels it and costs reputation.`
+    :rt?`Justified: ${rt}. No reputation penalty.`:'There is no dispute with them, so other nations will trust you less.';
+  $('wpText').textContent=t;
+  $('wpGo').disabled=tl>0;
+  $('warPrompt').hidden=false;
+  clearTimeout(wpTimer);wpTimer=setTimeout(hideWarPrompt,9000);
+}
+function hideWarPrompt(){clearTimeout(wpTimer);const w=$('warPrompt');if(w)w.hidden=true;wpPending=null}
+$('wpNo').addEventListener('click',hideWarPrompt);
+$('wpDip').addEventListener('click',()=>{const id=wpId;hideWarPrompt();openDip(id)});
+$('wpGo').addEventListener('click',()=>{
+  if(!G||!wpPending)return;
+  const go=wpPending;hideWarPrompt();
+  const r=declareWar(0,wpId);
+  note=r||go()||'';refreshUI(true);
+});
+let allIn=false;
+function setAllIn(v){allIn=v;const b=$('allIn');b.textContent='All-in: '+(v?'ON':'off');b.setAttribute('aria-pressed',String(v));b.classList.toggle('danger',v);note=v?'All-in ON: one click spends all your gold on the selected build, upgrade or recruit order.':'';renderStatus()}
+function buildMany(n,type,i){
+  const g0=n.gold,first=tryBuild(n,type,i);
+  if(first)return first;
+  let k=1;const cx=i%MW,cy=(i/MW)|0;
+  outer:for(let r=2;r<=40&&k<120;r+=2){
+    for(let dy=-r;dy<=r;dy+=2)for(let dx=-r;dx<=r;dx+=2){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+      const x=cx+dx,y=cy+dy;if(x<0||y<0||x>=MW||y>=MH)continue;
+      const j=y*MW+x;if(owner[j]!==n.id||!terr[j]||G.bat.has(j))continue;
+      if(n.gold<buildCost(n,type))break outer;
+      if(!tryBuild(n,type,j))k++;
+    }
+  }
+  return `All-in: built ${k} ${k>1?(BUILD[type].name.endsWith('y')?BUILD[type].name.slice(0,-1)+'ies':BUILD[type].name+'s'):BUILD[type].name} for ${fmt(g0-n.gold)} gold.`;
+}
+function upgradeMany(n,i){
+  const g0=n.gold;let b=G.bat.get(i);
+  if(!b||b.owner!==n.id)return upgradeBuilding(n,i);
+  const type=b.type;let k=0;
+  const list=G.blds.filter(q=>q.owner===n.id&&q.type===type).sort((a,c)=>(a===b?-1:c===b?1:0)||a.lv-c.lv);
+  for(let pass=0;pass<4;pass++){
+    let any=false;
+    for(const q of list){if(q.lv<MAXLV&&n.gold>=upCost(q)){n.gold-=upCost(q);q.lv++;n.lsum[type]++;k++;any=true}}
+    if(!any)break;
+  }
+  return k?`All-in: ${k} upgrade${k>1?'s':''} for ${fmt(g0-n.gold)} gold.`:upgradeBuilding(n,i);
+}
+function recruitMany(n,key){
+  const g0=n.gold,t0=n.troops;let k=0,msg='';
+  for(;k<60;k++){msg=recruit(0,key);if(msg)break}
+  return k?`All-in: recruited ${fmt(n.troops-t0)} troops for ${fmt(g0-n.gold)} gold.`:msg;
+}
+$('allIn').addEventListener('click',()=>setAllIn(!allIn));
+function setMode(m){mode=m;note='';updateOrders();renderStatus()}
+function tileFromEvent(e){
+  const r=cv.getBoundingClientRect();
+  const x=Math.floor(cam.x+(e.clientX-r.left)/cam.z),y=Math.floor(cam.y+(e.clientY-r.top)/cam.z);
+  return x>=0&&y>=0&&x<MW&&y<MH?{x,y}:null;
+}
+
+/* ---------- camera ---------- */
+function fitCam(){cam.minZ=Math.min(CW/MW,CH/MH);cam.z=cam.minZ;cam.x=(MW-CW/cam.z)/2;cam.y=(MH-CH/cam.z)/2}
+function clampCam(){
+  const vw=CW/cam.z,vh=CH/cam.z;
+  cam.x=vw>=MW?(MW-vw)/2:clamp(cam.x,-vw*.2,MW-vw*.8);
+  cam.y=vh>=MH?(MH-vh)/2:clamp(cam.y,-vh*.2,MH-vh*.8);
+}
+function focusCam(x,y,z){cam.z=clamp(z,cam.minZ,cam.maxZ);cam.x=x+.5-CW/cam.z/2;cam.y=y+.5-CH/cam.z/2;clampCam()}
+function zoomAt(px,py,f){
+  const wx=cam.x+px/cam.z,wy=cam.y+py/cam.z;
+  cam.z=clamp(cam.z*f,cam.minZ,cam.maxZ);
+  cam.x=wx-px/cam.z;cam.y=wy-py/cam.z;clampCam();
+}
+const ptrs=new Map();let drag=null,pinch=null;
+function localXY(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+function pinchState(){const a=[...ptrs.values()];return{d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2}}
+cv.addEventListener('pointerdown',e=>{
+  try{cv.setPointerCapture(e.pointerId)}catch(_){}
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1)drag={sx:e.clientX,sy:e.clientY,cx:cam.x,cy:cam.y,moved:false};
+  else if(ptrs.size===2){drag=null;pinch=pinchState()}
+});
+cv.addEventListener('pointermove',e=>{
+  if(!G)return;
+  if(ptrs.has(e.pointerId)){
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size===2&&pinch){
+      const s=pinchState(),r=cv.getBoundingClientRect();
+      zoomAt(s.mx-r.left,s.my-r.top,s.d/pinch.d);
+      cam.x-=(s.mx-pinch.mx)/cam.z;cam.y-=(s.my-pinch.my)/cam.z;clampCam();
+      pinch=s;return;
+    }
+    if(drag){
+      const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
+      if(!drag.moved&&Math.hypot(dx,dy)>6){drag.moved=true;cv.classList.add('grab')}
+      if(drag.moved){cam.x=drag.cx-dx/cam.z;cam.y=drag.cy-dy/cam.z;clampCam();return}
+    }
+  }
+  hover=tileFromEvent(e);renderStatus();
+});
+function endPointer(e,tap){
+  const wasDrag=drag&&drag.moved;
+  ptrs.delete(e.pointerId);
+  if(ptrs.size<2)pinch=null;
+  if(ptrs.size===0){
+    if(tap&&drag&&!wasDrag)onTap(e);
+    drag=null;cv.classList.remove('grab');
+  }
+}
+cv.addEventListener('pointerup',e=>endPointer(e,true));
+cv.addEventListener('pointercancel',e=>endPointer(e,false));
+cv.addEventListener('pointerleave',()=>{hover=null;renderStatus()});
+cv.addEventListener('wheel',e=>{e.preventDefault();const l=localXY(e);zoomAt(l.x,l.y,Math.exp(-e.deltaY*.0016))},{passive:false});
+$('zIn').addEventListener('click',()=>zoomAt(CW/2,CH/2,1.5));
+$('zOut').addEventListener('click',()=>zoomAt(CW/2,CH/2,1/1.5));
+$('zFit').addEventListener('click',()=>{fitCam()});
+
+/* ---------- keyboard pan, minimap, help ---------- */
+const keysDown=new Set();
+document.addEventListener('keyup',e=>{keysDown.delete(e.key.toLowerCase())});
+window.addEventListener('blur',()=>keysDown.clear());
+const mini=$('mini'),mctx2=mini.getContext('2d');
+let miniDrag=false;
+function miniMove(e){
+  const r=mini.getBoundingClientRect();
+  const tx=(e.clientX-r.left)/r.width*MW,ty=(e.clientY-r.top)/r.height*MH;
+  cam.x=tx-CW/cam.z/2;cam.y=ty-CH/cam.z/2;clampCam();
+}
+mini.addEventListener('pointerdown',e=>{miniDrag=true;try{mini.setPointerCapture(e.pointerId)}catch(_){}miniMove(e)});
+mini.addEventListener('pointermove',e=>{if(miniDrag)miniMove(e)});
+mini.addEventListener('pointerup',()=>{miniDrag=false});
+mini.addEventListener('pointercancel',()=>{miniDrag=false});
+function drawMini(){
+  if(!G)return;
+  const w=mini.width,h=mini.height;
+  mctx2.imageSmoothingEnabled=true;
+  mctx2.drawImage(mapC,0,0,w,h);
+  const sx=w/MW,sy=h/MH,vw=CW/cam.z,vh=CH/cam.z;
+  mctx2.strokeStyle='#ffffff';mctx2.lineWidth=1.6;
+  mctx2.strokeRect(cam.x*sx,cam.y*sy,vw*sx,vh*sy);
+  for(const b of G.blds){if(b.type==='silo'||b.type==='city'){mctx2.fillStyle=NATCSS[b.owner];mctx2.fillRect(b.x*sx-1,b.y*sy-1,2,2)}}
+}
+$('helpBtn').addEventListener('click',()=>{$('helpOv').hidden=false});
+$('helpClose').addEventListener('click',()=>{$('helpOv').hidden=true});
+$('helpOv').addEventListener('click',e=>{if(e.target===$('helpOv'))$('helpOv').hidden=true});
+
+/* ---------- UI ---------- */
+const itemRefs=[];
+function buildDock(){
+  const tabsEl=$('tabs'),panes=$('panes');tabsEl.innerHTML='';panes.innerHTML='';
+  for(const [id,name] of TABS){
+    const b=document.createElement('button');b.textContent=name;b.dataset.tab=id;b.setAttribute('aria-pressed','false');
+    tabsEl.appendChild(b);
+    const p=document.createElement('div');p.className='pane';p.id='pane-'+id;p.hidden=true;panes.appendChild(p);
+    if(id==='attack'){
+      p.innerHTML=`<div class="attackpane"><label class="ratio" for="ratio"><span>Troops sent per attack <b id="ratioVal">80%</b></span><input type="range" id="ratio" min="10" max="100" step="5" value="80"></label><div class="attackinfo" id="attackInfo"></div><button class="btn sm" id="retreatBtn">Retreat all attacks</button></div>`;
+    }else if(id==='economy'){
+      p.innerHTML=`<div class="attackpane"><label class="ratio" for="tax"><span>Tax rate <b id="taxVal">25%</b></span><input type="range" id="tax" min="0" max="${Math.round(TAX_MAX*100)}" step="5" value="25"></label><div class="attackinfo" id="econInfo"></div><div class="dact"><button class="btn sm" id="bondBtn">Issue bonds</button><button class="btn sm" id="repayBtn">Repay</button></div></div>`;
+    }else{
+      for(const m of PANE_ITEMS[id]){
+        const it=document.createElement('button');it.className='item';it.dataset.mode=m;
+        it.innerHTML=`<span class="bn">${LABEL[m]}</span><span class="cost"></span><span class="st"></span>`;
+        p.appendChild(it);itemRefs.push({id:m,el:it,cost:it.children[1],st:it.children[2]});
+      }
+    }
+  }
+  $('ratio').addEventListener('input',e=>{$('ratioVal').textContent=e.target.value+'%'});
+  $('tax').addEventListener('input',e=>{if(!G)return;P().tax=clamp(Number(e.target.value)/100,0,TAX_MAX);updateEcon()});
+  $('bondBtn').addEventListener('click',()=>{if(!G||G.over)return;note=issueBonds(0);refreshUI(true)});
+  $('repayBtn').addEventListener('click',()=>{if(!G||G.over)return;note=repayBonds(0);refreshUI(true)});
+  $('retreatBtn').addEventListener('click',()=>{if(!G)return;G.attacks.filter(a=>a.atk===0).forEach(endAttack);note='Attacks recalled.';refreshUI(true)});
+}
+function setTab(t){
+  tab=t;mode='attack';note='';
+  for(const b of $('tabs').children)b.setAttribute('aria-pressed',String(b.dataset.tab===t));
+  for(const [id] of TABS)$('pane-'+id).hidden=id!==t;
+  if(G){updateOrders();renderStatus()}
+}
+function orderInfo(id,p){
+  if(id==='t:small'||id==='t:big'){
+    const R=RECRUIT[id.slice(2)],room=troopCap(p)-p.troops,add=Math.min(R.n,Math.max(0,room)),cost=Math.ceil(R.cost*add/R.n);
+    return{cost:R.cost,st:room<R.n*.1?'Troop cap reached':`+${fmt(add)} troops now`,ok:room>=R.n*.1&&p.gold>=cost};
+  }
+  if(id==='t:drive'){const on=driveOn(p);return{cost:DRIVE_COST,st:on?`Active, ${Math.ceil(p.drive-G.t)}s left`:`${DRIVE_MULT}x troop growth for ${DRIVE_LEN}s`,ok:!on&&p.gold>=DRIVE_COST}}
+  if(id==='u:up')return{cost:'',st:`Click a building to level it (max ${MAXLV})`,ok:p.alive&&p.blds!==0};
+  if(id==='n:sink'){const hs=G.boats.filter(b=>b.owner!==0&&atWar(0,b.owner)).length,r=G.blds.some(b=>b.owner===0&&b.type==='silo'&&b.ready<=G.t);return{cost:ANTISHIP,st:p.cnt.silo?(r?`${hs} hostile ship${hs===1?'':'s'} at sea · click one`:'Silos reloading'):'Needs a silo',ok:p.cnt.silo>0&&r&&p.gold>=ANTISHIP}}
+  if(id==='n:land'){const cap=600*p.lsum.port;return{cost:'',st:p.cnt.port?`${p.cnt.port} port${p.cnt.port>1?'s':''} · up to ${fmt(cap)} troops · uses the Attack slider`:'Build a Port first',ok:p.cnt.port>0}}
+  if(id.startsWith('b:')){const t=id.slice(2),c=buildCost(p,t);return{cost:c,st:`${BUILD[t].desc} · own ${p.cnt[t]}`,ok:p.gold>=c}}
+  if(id.startsWith('m:')){
+    const M=MISSILES[id.slice(2)];
+    const silos=G.blds.filter(b=>b.owner===0&&b.type==='silo');
+    const ready=silos.filter(b=>b.ready<=G.t).length;
+    const wait=silos.length?Math.max(0,Math.min(...silos.map(b=>b.ready))-G.t):0;
+    const st=p.cnt.silo<M.silos?`Needs ${M.silos} silo${M.silos>1?'s':''}`:ready?`Radius ${M.r} · ${M.desc}`:`Reloading ${Math.ceil(wait)}s`;
+    return{cost:M.cost,st,ok:p.gold>=M.cost&&p.cnt.silo>=M.silos&&ready>0};
+  }
+  if(id==='j:bomber')return{cost:'',st:`${p.bombers} ready · ${p.cnt.air?'reusable':'needs airfield'}`,ok:p.bombers>0};
+  if(id==='buy:sat'){const c=satCost(p);return{cost:c,st:p.sats>=3?'Max intel (L3)':`Intel L${p.sats} to L${p.sats+1}: ${['see troop estimates','exact troops and economy','war plans and attack alerts'][p.sats]}`,ok:p.sats<3&&p.gold>=c}}
+  if(id.startsWith('buy:')){const k=id.slice(4),J=JET[k];return{cost:J.cost,st:`Hangar ${jetsTotal(p)}/${jetCap(p)}${k==='fighter'?' · '+p.fighters+' on guard':''}`,ok:p.gold>=J.cost&&jetsTotal(p)<jetCap(p)&&p.cnt.air>0}}
+  return{cost:'',st:'',ok:false};
+}
+function updateOrders(){
+  if(!G)return;
+  const p=P(),live=G.phase==='play'&&!G.over&&p.alive;
+  for(const o of itemRefs){
+    const inf=orderInfo(o.id,p);
+    o.cost.textContent=inf.cost;o.st.textContent=inf.st;
+    o.el.disabled=!(live&&inf.ok);
+    o.el.classList.toggle('on',o.id===mode);
+  }
+}
+function buildStandings(){
+  const root=$('standings');root.innerHTML='';G.rows=[];
+  for(const n of G.nations){
+    const r=document.createElement('div');r.className='nrow'+(n.human?' me':'');
+    r.innerHTML=`<i style="background:${NATCSS[n.id]}"></i><span class="nm">${n.name}</span><span class="tr"></span><span class="pc"></span>`;
+    root.appendChild(r);G.rows.push({n,el:r,tr:r.children[2],pc:r.children[3]});
+  }
+}
+function relKey(id){
+  if(id===0)return '';
+  if(atWar(0,id))return 'war';
+  const t=treatyOf(0,id);
+  if(t===2)return 'ally';
+  if(t===1)return 'trade';
+  return truceLeft(0,id)>0?'truce':'';
+}
+function updateStandings(){
+  const sorted=G.rows.slice().sort((a,b)=>b.n.tiles-a.n.tiles);
+  sorted.forEach((r,k)=>{
+    r.el.style.order=k;r.el.hidden=!(r.n.alive||r.n.spawned);r.el.classList.toggle('dead',G.phase==='play'&&!r.n.alive&&r.n.spawned);
+    r.el.dataset.rel=G.phase==='play'&&r.n.alive?relKey(r.n.id):'';
+    r.tr.textContent=troopTxt(r.n);
+    r.pc.textContent=r.n.tiles?pct(r.n.tiles/G.land):'0%';
+  });
+}
+function updateHud(){
+  const p=P(),D=DIFFS[diff],truce=G.phase==='play'&&G.t<D.peace,ap=Math.round(p.approval),net=goldRate(p),wc=warCount(p);
+  $('hud').innerHTML=
+    `<span class="chip">Nation <b>${p.country||'-'}</b></span>`+
+    (p.sats?`<span class="chip">Intel <b>L${p.sats}</b></span>`:'')+
+    `<span class="chip blue">Gold <b>${fmt(p.gold)}</b> ${net>=0?'+':''}${net.toFixed(1)}/s</span>`+
+    `<span class="chip">Troops <b>${fmt(p.troops)}</b>/${fmt(troopCap(p))} +${troopGrowth(p).toFixed(1)}/s${driveOn(p)?' <b>drive</b>':''}</span>`+
+    `<span class="chip">Land <b>${pct(p.tiles/G.land)}</b></span>`+
+    `<span class="chip${ap<30?' bad':''}">Approval <b>${ap}%</b></span>`+
+    (p.debt>0?`<span class="chip">Debt <b>${fmt(p.debt)}</b></span>`:'')+
+    (wc?`<span class="chip bad">At war <b>${wc}</b></span>`:'')+
+    (G.bloc>0?`<span class="chip">Bloc <b>${pct(G.bloc)}</b>${G.blocT?` ${Math.max(0,BLOC_TIME-G.blocT)}s`:''}</span>`:'')+
+    `<span class="chip">Time <b>${fmtTime(G.t)}</b></span>`+
+    (truce?`<span class="chip">Truce <b>${fmtTime(D.peace-G.t)}</b></span>`:'');
+  $('pauseBtn').firstChild.textContent=G.paused&&G.phase==='play'?'Resume':'Pause';
+}
+function updateAttackInfo(){
+  const p=P(),mine=G.attacks.filter(a=>a.atk===0);
+  $('attackInfo').innerHTML=`<span>Troops <b>${fmt(p.troops)}</b> / ${fmt(troopCap(p))} · Cities <b>${p.cnt.city}</b> · Barracks <b>${p.cnt.barracks}</b> · Silos <b>${p.cnt.silo}</b> · SAMs <b>${p.cnt.sam}</b></span>`+
+    `<span>${mine.length?mine.map(a=>`→ ${a.def<0?'Unclaimed':G.nations[a.def].name} <b>${fmt(a.troops)}</b>`).join(' · '):'No attacks underway'}</span>`;
+}
+function updateLog(){$('log').innerHTML=G.log.slice(0,5).map(l=>`<li class="${l.cls}">${l.text}</li>`).join('')}
+function hintFor(m){
+  if(m==='attack')return 'Attack: click land to send troops (nations you are not at war with need a declaration first, press P)';
+  if(m.startsWith('b:')){const t=m.slice(2);return `${BUILD[t].name} (${buildCost(P(),t)} gold): click your own land`}
+  if(m.startsWith('m:')){const M=MISSILES[m.slice(2)];return `${M.name} (${M.cost} gold): click anywhere to launch, radius ${M.r}`}
+  if(m==='j:bomber')return 'Bomber strike: click a target';
+  if(m==='u:up')return 'Upgrade: click one of your buildings (cost shown on failure, max level '+MAXLV+')';
+  if(m==='n:sink')return 'Sink ship: click an enemy ship (at war with you) to fire an anti-ship missile. 80% hit chance.';
+  if(m==='n:land')return 'Naval landing: click an enemy (at war) or unclaimed coast. Troops sent follow the Attack tab slider.';
+  return '';
+}
+function renderStatus(){
+  if(!G)return;
+  const el=$('statusLine');
+  if(G.phase==='spawn'){
+    let h2=note?`<span class="warn">${note}</span>`:'<span class="hint">Click a coloured country to lead it.</span>';
+    if(hover){
+      const o=owner[hover.y*MW+hover.x];
+      if(o>0){
+        const n=G.nations[o],rv=RIV.filter(r=>r[0]===n.cc||r[1]===n.cc).map(r=>`${NAME_OF[r[0]===n.cc?r[1]:r[0]]} (${r[2]})`);
+        h2+=` · <b>${n.name}</b> ${pct(n.tiles/G.land)} of land, ${fmt(n.troops)} troops, ${n.pers.k==='warlord'?'aggressive':n.pers.k==='builder'?'peaceful':'balanced'}${rv.length?'. Rivals: '+rv.join(', '):''}`;
+      }
+    }
+    el.innerHTML=h2;return;
+  }
+  let h='';
+  if(note)h=`<span class="warn">${note}</span>`;
+  else if(G.over)h='Game over.';
+  else if(G.paused)h='Paused.';
+  else h=`<span class="hint">${hintFor(mode)}</span>`+(hover?` · ${describe(hover.x,hover.y)}`:'');
+  el.innerHTML=h;
+}
+let lastUI=0;
+function refreshUI(force){
+  if(!G)return;
+  const now=performance.now();
+  if(!force&&now-lastUI<250)return;
+  lastUI=now;
+  const spawn=G.phase==='spawn';
+  $('spawnBar').hidden=!spawn;$('dockMain').hidden=spawn;
+  updateHud();updateAttackInfo();updateEcon();updateOrders();updateStandings();updateLog();renderStatus();renderEvent();updateDip();
+  $('dipBtn').disabled=spawn||!!G.over;
+}
+function showEnd(){
+  const o=$('overlay'),w=G.over.winner,win=w===0;
+  const name=w>=0?G.nations[w].name:'Nobody';
+  o.innerHTML=`<div class="result"><h2 class="${win?'win':'lose'}">${win?'Victory':'Defeat'}</h2><p>${win?G.over.why:`${name} wins. ${G.over.why}`} Time ${fmtTime(G.t)}.</p><button class="btn pri" id="againBtn">Play again</button></div>`;
+  o.hidden=false;
+  const b=$('againBtn');if(b)b.addEventListener('click',()=>newGame(newSeed()));
+  refreshUI(true);
+}
+
+/* ---------- drawing (world units = tiles) ---------- */
+function layout(){
+  const dpr=window.devicePixelRatio||1;
+  CW=stage.clientWidth||900;CH=stage.clientHeight||560;
+  cv.width=Math.round(CW*dpr);cv.height=Math.round(CH*dpr);
+  if(needFit){fitCam();needFit=false}else{cam.minZ=Math.min(CW/MW,CH/MH);cam.z=clamp(cam.z,cam.minZ,cam.maxZ);clampCam()}
+}
+function drawBld(b,z){
+  const px=v=>v/z,x=b.x+.5,y=b.y+.5,u=px(Math.max(8,z*1.4)),col=NATCSS[b.owner];
+  ctx.fillStyle='#0b1620';ctx.strokeStyle=col;ctx.lineWidth=px(2);
+  ctx.beginPath();ctx.arc(x,y,u*.62,0,7);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#f4f7f9';ctx.strokeStyle='#f4f7f9';ctx.lineWidth=px(1.4);const q=u*.3;
+  if(b.type==='city'){ctx.fillRect(x-q,y-q*.2,q*.7,q*1.2);ctx.fillRect(x-q*.3,y-q,q*.7,q*2);ctx.fillRect(x+q*.5,y-q*.1,q*.6,q*1.1)}
+  else if(b.type==='silo'){ctx.beginPath();ctx.moveTo(x,y-q*1.1);ctx.lineTo(x+q*.8,y+q*.9);ctx.lineTo(x-q*.8,y+q*.9);ctx.closePath();ctx.fill()}
+  else if(b.type==='sam'){ctx.beginPath();ctx.arc(x,y,q*.95,0,7);ctx.stroke();ctx.beginPath();ctx.arc(x,y,q*.25,0,7);ctx.fill()}
+  else if(b.type==='air'){ctx.beginPath();ctx.moveTo(x-q,y);ctx.lineTo(x+q,y);ctx.moveTo(x,y-q);ctx.lineTo(x,y+q);ctx.stroke()}
+  else if(b.type==='market'){ctx.beginPath();ctx.arc(x,y,q*.85,0,7);ctx.stroke();ctx.fillRect(x-q*.14,y-q*.6,q*.28,q*1.2)}
+  else if(b.type==='mine'){ctx.beginPath();ctx.moveTo(x,y-q*1.05);ctx.lineTo(x+q,y);ctx.lineTo(x,y+q*1.05);ctx.lineTo(x-q,y);ctx.closePath();ctx.fill()}
+  else if(b.type==='barracks'){ctx.fillRect(x-q,y-q*.1,q*2,q*1.1);ctx.beginPath();ctx.moveTo(x-q*1.2,y-q*.1);ctx.lineTo(x,y-q*1.1);ctx.lineTo(x+q*1.2,y-q*.1);ctx.closePath();ctx.fill()}
+  else if(b.type==='battery'){ctx.fillRect(x-q*.9,y+q*.1,q*1.8,q*.7);ctx.beginPath();ctx.moveTo(x-q*.2,y+q*.1);ctx.lineTo(x+q*.9,y-q*.8);ctx.lineWidth=px(2.6);ctx.stroke()}
+  else if(b.type==='port'){ctx.beginPath();ctx.arc(x,y-q*.55,q*.28,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(x,y-q*.3);ctx.lineTo(x,y+q*.9);ctx.moveTo(x-q*.7,y+q*.25);ctx.quadraticCurveTo(x,y+q*1.4,x+q*.7,y+q*.25);ctx.stroke()}
+  else ctx.fillRect(x-q*.8,y-q*.8,q*1.6,q*1.6);
+  if(b.lv>1){ctx.fillStyle='#ffd166';ctx.font=`700 ${u*.55}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText(String(b.lv),x+u*.42,y+u*.95);ctx.textAlign='center';ctx.textBaseline='middle'}
+}
+function drawJet(x,y,ang,sz,col,z){
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle=col;ctx.strokeStyle='#0b1620';ctx.lineWidth=1.3/z;
+  ctx.beginPath();ctx.moveTo(sz,0);ctx.lineTo(-sz*.7,-sz*.75);ctx.lineTo(-sz*.35,0);ctx.lineTo(-sz*.7,sz*.75);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+}
+function draw(now){
+  if(!G||!CW)return;
+  const dpr=window.devicePixelRatio||1,z=cam.z,px=v=>v/z,tt=G.t+(G.paused?0:acc);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#1c3f5c';ctx.fillRect(0,0,CW,CH);
+  ctx.setTransform(dpr*z,0,0,dpr*z,-cam.x*z*dpr,-cam.y*z*dpr);
+  ctx.imageSmoothingEnabled=false;flush();
+  ctx.drawImage(mapC,0,0,MW,MH);
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const n of G.nations){
+    if(!n.alive||n.tiles<12)continue;
+    const raw=Math.sqrt(n.tiles)*z*.5;if(raw<6.5)continue;
+    const fs=clamp(raw,10,30),lab=(raw>=13||n.human)?(n.human?'YOU':n.name.toUpperCase()):CC[n.id];
+    ctx.font=`600 ${px(fs)}px ${MONO}`;
+    ctx.lineWidth=px(3.5);ctx.strokeStyle='rgba(6,16,24,.75)';ctx.strokeText(lab,n.cx+.5,n.cy+.5);
+    ctx.fillStyle='#f4f8fa';ctx.fillText(lab,n.cx+.5,n.cy+.5);
+    if(!n.human&&raw>=11&&intelLv()>=1){const tt=troopTxt(n),fs2=Math.max(9,fs*.7);ctx.font=`500 ${px(fs2)}px ${MONO}`;ctx.lineWidth=px(3);ctx.strokeText(tt,n.cx+.5,n.cy+.5+px(fs*.95));ctx.fillStyle='#ffd27a';ctx.fillText(tt,n.cx+.5,n.cy+.5+px(fs*.95))}
+  }
+  if(z<4){
+    for(const b of G.blds){
+      if(b.type==='post')continue;
+      ctx.fillStyle=NATCSS[b.owner];ctx.strokeStyle='#0b1620';ctx.lineWidth=px(1);
+      ctx.beginPath();ctx.arc(b.x+.5,b.y+.5,px((b.type==='city'||b.type==='barracks'||b.type==='market'||b.type==='mine'?2.6:4)+(b.lv-1)*.8),0,7);ctx.fill();ctx.stroke();
+    }
+  }else for(const b of G.blds)drawBld(b,z);
+  const pulse=reduced?.5:(Math.sin(now/240)+1)/2;
+  for(const m of G.missiles){
+    const f=clamp((tt-m.t0)/m.dur,0,1),x=m.x0+(m.x1-m.x0)*f+.5,y=m.y0+(m.y1-m.y0)*f+.5;
+    ctx.strokeStyle=NATCSS[m.owner];ctx.globalAlpha=.35;ctx.lineWidth=px(1.6);
+    ctx.beginPath();ctx.moveTo(m.x0+.5,m.y0+.5);ctx.lineTo(x,y);ctx.stroke();ctx.globalAlpha=1;
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,px(3.2),0,7);ctx.fill();
+    ctx.strokeStyle=NATCSS[m.owner];ctx.lineWidth=px(2);ctx.stroke();
+    if(m.owner!==0&&owner[Math.round(m.y1)*MW+Math.round(m.x1)]===0){
+      ctx.strokeStyle='#ff5a4d';ctx.lineWidth=px(2.2);ctx.globalAlpha=.4+.6*pulse;ctx.beginPath();ctx.arc(m.x1+.5,m.y1+.5,Math.max(m.r,px(9)),0,7);ctx.stroke();ctx.globalAlpha=1;
+    }
+  }
+  for(const bt of G.boats){
+    const ps=boatPos({pts:bt.pts,d:Math.min(bt.len,bt.d+(G.paused?0:acc)*bt.speed)});
+    ctx.strokeStyle=NATCSS[bt.owner];ctx.globalAlpha=.3;ctx.lineWidth=px(1.2);ctx.setLineDash([px(4),px(4)]);
+    ctx.beginPath();ctx.moveTo(ps.x,ps.y);for(const q of bt.pts)if(q.d>bt.d)ctx.lineTo(q.x,q.y);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    const sz=px(Math.max(7,z*1.6));
+    ctx.save();ctx.translate(ps.x,ps.y);ctx.rotate(ps.ang);
+    ctx.fillStyle='#f4f7f9';ctx.strokeStyle=NATCSS[bt.owner];ctx.lineWidth=px(2);
+    ctx.beginPath();ctx.moveTo(sz*.9,0);ctx.lineTo(-sz*.6,sz*.45);ctx.lineTo(-sz*.4,0);ctx.lineTo(-sz*.6,-sz*.45);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+  }
+  for(const bt of G.boats){
+    const ps=boatPos({pts:bt.pts,d:Math.min(bt.len,bt.d+(G.paused?0:acc)*bt.speed)}),sz=px(Math.max(7,z*1.6));
+    ctx.save();
+    if(bt.owner!==0&&bt.def===0){ctx.strokeStyle='#ff5a4d';ctx.lineWidth=px(2);ctx.globalAlpha=.4+.5*(.5+.5*Math.sin(tt*6));ctx.beginPath();ctx.arc(ps.x,ps.y,sz*1.5,0,7);ctx.stroke();ctx.globalAlpha=1}
+    ctx.fillStyle='#fff';ctx.font=`bold ${px(11)}px sans-serif`;ctx.textAlign='center';ctx.fillText(fmt(bt.troops),ps.x,ps.y-sz*1.2);
+    ctx.restore();
+  }
+  for(const b of G.bombers){
+    const f=clamp((tt-b.t0)/b.dur,0,1),g=b.phase==='out'?f:1-f;
+    const x=b.x0+(b.x1-b.x0)*g+.5,y=b.y0+(b.y1-b.y0)*g+.5;
+    let ang=Math.atan2(b.y1-b.y0,b.x1-b.x0);if(b.phase==='back')ang+=Math.PI;
+    drawJet(x,y,ang,px(7),NATCSS[b.owner],z);
+  }
+  for(const f of G.fx){
+    const p=clamp((tt-f.t0)/f.dur,0,1),x=f.x+.5,y=f.y+.5;
+    if(f.k==='boom'){
+      ctx.fillStyle='#ffb347';ctx.globalAlpha=.55*(1-p);ctx.beginPath();ctx.arc(x,y,f.r*(.3+.7*Math.min(1,p*2)),0,7);ctx.fill();
+      ctx.strokeStyle='#fff3d0';ctx.globalAlpha=1-p;ctx.lineWidth=px(2.5);ctx.beginPath();ctx.arc(x,y,f.r*(.4+.9*p),0,7);ctx.stroke();ctx.globalAlpha=1;
+    }else{
+      ctx.strokeStyle='#bfefff';ctx.globalAlpha=1-p;ctx.lineWidth=px(2);ctx.beginPath();ctx.arc(x,y,px(5+16*p),0,7);ctx.stroke();ctx.globalAlpha=1;
+    }
+  }
+  if(hover&&G.phase==='play'&&!G.over){
+    const x=hover.x+.5,y=hover.y+.5;ctx.lineWidth=px(2);
+    if(mode.startsWith('m:')){
+      const M=MISSILES[mode.slice(2)];ctx.strokeStyle='#f2b84b';
+      ctx.beginPath();ctx.arc(x,y,Math.max(px(5),M.r),0,7);ctx.stroke();
+      if(M.n>1){ctx.setLineDash([px(5),px(5)]);ctx.beginPath();ctx.arc(x,y,M.spread,0,7);ctx.stroke();ctx.setLineDash([])}
+    }else if(mode==='j:bomber'){ctx.strokeStyle='#f2b84b';ctx.beginPath();ctx.arc(x,y,Math.max(px(5),BOMB_R),0,7);ctx.stroke()}
+    else if(mode==='u:up'){const bb=G.bat.get(hover.y*MW+hover.x);ctx.strokeStyle=bb&&bb.owner===0&&bb.lv<MAXLV?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x-.5,hover.y-.5,2,2)}
+    else if(mode.startsWith('b:')){const i=hover.y*MW+hover.x,ok=owner[i]===0&&terr[i]&&!G.bat.has(i)&&(mode!=='b:mine'||terr[i]===3)&&(mode!=='b:port'||coastal(i));ctx.strokeStyle=ok?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x,hover.y,1,1)}
+    else{ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=px(1.5);ctx.strokeRect(hover.x,hover.y,1,1)}
+  }
+}
+
+/* ---------- loop and wiring ---------- */
+let last=performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(.25,(now-last)/1000);last=now;
+  if(G&&G.phase==='play'&&!G.paused&&!G.over){
+    acc+=dt*G.speed;let n=0;
+    while(acc>=TICK&&n<16){step(TICK);acc-=TICK;n++}
+    if(n>=16)acc=0;
+  }
+  if(G&&keysDown.size){
+    const sp=720/cam.z*dt;let dx=0,dy=0;
+    if(keysDown.has('a')||keysDown.has('arrowleft'))dx--;
+    if(keysDown.has('d')||keysDown.has('arrowright'))dx++;
+    if(keysDown.has('w')||keysDown.has('arrowup'))dy--;
+    if(keysDown.has('s')||keysDown.has('arrowdown'))dy++;
+    if(dx||dy){cam.x+=dx*sp;cam.y+=dy*sp;clampCam()}
+  }
+  draw(now);
+  drawMini();
+  refreshUI(false);
+}
+function newSeed(){return 1000+Math.floor(Math.random()*9000)}
+function togglePause(){if(!G||G.phase!=='play'||G.over)return;G.paused=!G.paused;note='';refreshUI(true)}
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab)});
+$('panes').addEventListener('click',e=>{
+  const b=e.target.closest('[data-mode]');if(!b||b.disabled||!G)return;
+  const id=b.dataset.mode;
+  if(id.startsWith('t:')){
+    if(G.paused||G.phase!=='play'||G.over)note='Paused. Press Space to resume.';
+    else note=id==='t:drive'?startDrive(0):allIn?recruitMany(P(),id.slice(2)):recruit(0,id.slice(2));
+    refreshUI(true);return;
+  }
+  if(id==='buy:sat'){note=buySat(P());refreshUI(true);return}
+  if(id.startsWith('buy:')){note=buyJet(0,id.slice(4));refreshUI(true);return}
+  setMode(mode===id?'attack':id);
+});
+$('pauseBtn').addEventListener('click',togglePause);
+$('speed').addEventListener('change',e=>{if(G)G.speed=Number(e.target.value)||1});
+$('diff').addEventListener('change',e=>{diff=e.target.value;note='AI set to '+e.target.selectedOptions[0].text+'.';renderStatus();refreshUI(true)});
+$('newBtn').addEventListener('click',()=>newGame(newSeed()));
+$('randomSpawn').addEventListener('click',randomSpawn);
+$('dockToggle').addEventListener('click',e=>{
+  const open=$('panes').hidden;$('panes').hidden=!open;$('tabs').hidden=!open;
+  e.target.textContent=open?'Hide':'Show';e.target.setAttribute('aria-expanded',String(open));
+});
+$('stToggle').addEventListener('click',e=>{
+  const open=$('standings').hidden;$('standings').hidden=!open;
+  e.target.textContent=open?'Hide':'Show';e.target.setAttribute('aria-expanded',String(open));
+  stage.classList.toggle('st-open',open);
+});
+document.addEventListener('keydown',e=>{
+  if(!G||e.metaKey||e.ctrlKey||e.altKey)return;
+  const t=e.target;if(t&&(t.tagName==='SELECT'||t.tagName==='INPUT'))return;
+  const lk=e.key.toLowerCase();
+  if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(lk)){keysDown.add(lk);e.preventDefault();return}
+  if(e.key===' '){e.preventDefault();togglePause()}
+  else if(e.key==='Escape'){if(dipOpen)closeDip();else setMode('attack')}
+  else if(e.key==='p'||e.key==='P')toggleDip();
+  else if(lk==='x')setAllIn(!allIn);
+  else if(e.key>='1'&&e.key<='7')setTab(TABS[Number(e.key)-1][0]);
+  else if(e.key==='+'||e.key==='=')zoomAt(CW/2,CH/2,1.3);
+  else if(e.key==='-')zoomAt(CW/2,CH/2,1/1.3);
+});
+/* ---------- economy readout, decisions card, diplomacy panel ---------- */
+function updateEcon(){
+  if(!G)return;
+  const p=P(),e=econ(p),net=goldRate(p),tgt=Math.round(approvalTarget(p)),ap=Math.round(p.approval),live=G.phase==='play'&&!G.over&&p.alive;
+  $('taxVal').textContent=Math.round(p.tax*100)+'%';
+  if(document.activeElement!==$('tax'))$('tax').value=Math.round(p.tax*100);
+  const parts=[`land ${e.land.toFixed(1)}`,`cities ${e.city.toFixed(1)}`];
+  if(e.market)parts.push(`markets ${e.market.toFixed(1)}`);
+  if(e.mine)parts.push(`mines ${e.mine.toFixed(1)}`);
+  if(e.trade)parts.push(`trade ${e.trade.toFixed(1)}`);
+  if(e.bonus)parts.push(`other ${e.bonus.toFixed(1)}`);
+  if(p.debt>0)parts.push(`bond payments -${p.debtRate.toFixed(1)}`);
+  const hint=ap<12?'Unrest! A revolt is coming. Cut taxes or end wars.':ap<30?'The people are unhappy: slower troops and less income.':'The people are content.';
+  $('econInfo').innerHTML=`<span>Approval <b>${ap}%</b> (heading to ${tgt}%) · Income <b>${net>=0?'+':''}${net.toFixed(1)}/s</b></span><span>${parts.join(' · ')}</span><span>Troop growth x${approvalMult(p).toFixed(2)}${p.debt>0?` · Debt ${fmt(p.debt)}`:''} · ${hint}</span>`;
+  const bb=$('bondBtn'),rb=$('repayBtn');
+  bb.textContent=`Issue bonds (+${fmt(bondGain(p))})`;bb.disabled=!(live&&p.debt<=0);
+  rb.textContent=p.debt>0?`Repay ${fmt(Math.min(p.debt,p.gold))}`:'Repay';rb.disabled=!(live&&p.debt>0&&p.gold>=1);
+}
+let evShown=-1;
+function renderEvent(){
+  const card=$('evCard'),ev=G&&G.event;
+  if(!ev||G.over){card.hidden=true;evShown=-1;return}
+  card.hidden=false;
+  const p=P();
+  if(evShown!==ev.id){
+    evShown=ev.id;$('evTitle').textContent=ev.title;$('evText').textContent=ev.text;
+    $('evOpts').innerHTML=ev.opts.map((o,i)=>`<button class="btn" data-ev="${i}">${o.label}</button>`).join('');
+  }
+  $('evTime').textContent=Math.max(0,Math.ceil(ev.exp-G.t))+'s';
+  [...$('evOpts').children].forEach((b,i)=>{b.disabled=!!(ev.opts[i].need&&p.gold<ev.opts[i].need)});
+}
+let dipOpen=false,dipWasRunning=false,dipConfirm=null,dipAdj=null,dipAdjT=0;
+const dipRows=[];
+const repLabel=v=>v<10?'Respected':v<30?'Neutral':v<60?'Distrusted':'Rogue state';
+function buildDip(){
+  const list=$('dipList');list.innerHTML='';dipRows.length=0;
+  for(const n of G.nations){
+    if(n.id===0)continue;
+    const el=document.createElement('div');el.className='drow';
+    el.innerHTML=`<div class="dl1"><i style="background:${NATCSS[n.id]}"></i><b>${n.name}</b><span class="dborder" hidden>borders you</span><span class="dst"></span></div><div class="dl2"><span class="dstat"></span><span class="opbar"><i></i></span><span class="dact"></span></div><div class="dintel" hidden></div>`;
+    const act=el.querySelector('.dact'),btns={};
+    for(const [k,label] of [['war','Declare war'],['peace','Propose peace'],['mend','Settle dispute'],['trade','Trade deal'],['alliance','Alliance'],['nukepact','Nuclear deal'],['endpact','End nuclear deal'],['end','End deal'],['gift','Gift']]){
+      const b=document.createElement('button');b.className='btn sm';b.dataset.dip=k;b.dataset.t=n.id;b.textContent=label;act.appendChild(b);btns[k]=b;
+    }
+    list.appendChild(el);
+    dipRows.push({n,el,st:el.querySelector('.dst'),stat:el.querySelector('.dstat'),bar:el.querySelector('.opbar i'),border:el.querySelector('.dborder'),intel:el.querySelector('.dintel'),btns});
+  }
+}
+function updateDip(){
+  if(!G||!dipOpen)return;
+  const p=P(),now=performance.now();
+  if(!dipAdj||now-dipAdjT>2000){dipAdj=aiBorders(p);dipAdjT=now}
+  const gift=giftAmount(),live=G.phase==='play'&&!G.over&&p.alive;
+  let allies=0,deals=0;
+  for(const d of G.nations){if(d.alive&&d.id){const t=treatyOf(0,d.id);if(t===2)allies++;else if(t===1)deals++}}
+  $('dipSum').textContent=`At war with ${warCount(p)} · Allies ${allies} · Trade deals ${deals} · Reputation ${repLabel(p.infamy)} (${Math.round(p.infamy)}) · Gold ${fmt(p.gold)}`;
+  $('dipNews').innerHTML=G.news.slice(0,4).map(x=>`<span>${x.text}</span>`).join('');
+  const order=dipRows.filter(r=>r.n.alive).map(r=>({r,k:((dipAdj[r.n.id+1]||0)>0?0:1e6)-r.n.tiles})).sort((a,b)=>a.k-b.k);
+  order.forEach((o,i)=>{o.r.el.style.order=i});
+  for(const r of dipRows){
+    const n=r.n;r.el.hidden=!n.alive;if(!n.alive)continue;
+    const id=n.id,war=atWar(0,id),tr=treatyOf(0,id),tl=truceLeft(0,id),op=opinion(id,0),border=(dipAdj[id+1]||0)>0;
+    const key=war?'war':tr===2?'ally':tr===1?'trade':tl>0?'truce':'';
+    r.el.dataset.rel=key;
+    r.st.className='dst '+key;r.st.textContent=war?'At war':tr===2?'Allied':tr===1?'Trade deal':tl>0?`Ceasefire ${Math.ceil(tl)}s`:'Peace';
+    r.border.hidden=!border;
+    const rt=REL.rivText.get(pk(0,id));
+    r.stat.textContent=`Land ${pct(n.tiles/G.land)} · Troops ${troopTxt(n)} · ${n.pers.k==='warlord'?'aggressive':n.pers.k==='builder'?'peaceful':'balanced'}${rt?' · Dispute: '+rt:''}`;
+    const lv=intelLv();r.intel.hidden=false;r.intel.textContent=lv>=2?intelLine(n,lv):'Buy satellites (Air tab) to see their economy, forces and war plans.';
+    const bar=r.bar;
+    if(op>=0){bar.style.left='50%';bar.style.right='auto';bar.style.width=(op/2)+'%';bar.style.background='var(--ok)'}
+    else{bar.style.right='50%';bar.style.left='auto';bar.style.width=(-op/2)+'%';bar.style.background='var(--red)'}
+    bar.parentElement.title=`Their opinion of you: ${Math.round(op)}`;
+    const B=r.btns,conf=dipConfirm&&dipConfirm.t===id&&now<dipConfirm.until;
+    B.war.hidden=war;B.war.disabled=!live||tl>0;B.war.classList.toggle('danger',!!conf);
+    B.war.textContent=tl>0?'Declare war (ceasefire)':conf?'Confirm war!':'Declare war';
+    B.peace.hidden=!war;B.peace.disabled=!live;
+    const pact=REL.pact[pk(0,id)]===1,riv=REL.riv[pk(0,id)]===1;
+    B.mend.hidden=war||!riv;B.mend.textContent=`Settle dispute (${fmt(mendCost())})`;B.mend.disabled=!live||p.gold<mendCost();
+    B.nukepact.hidden=war||pact;B.nukepact.disabled=!live;
+    B.endpact.hidden=!pact;B.endpact.disabled=!live;
+    B.trade.hidden=war||tr!==0;B.trade.disabled=!live;
+    B.alliance.hidden=war||tr!==1;B.alliance.disabled=!live;
+    B.end.hidden=!tr;B.end.textContent=tr===2?'End alliance':'Cancel trade deal';B.end.disabled=!live;
+    B.gift.hidden=war;B.gift.textContent=`Gift ${fmt(gift)}`;B.gift.disabled=!live||p.gold<gift;
+  }
+}
+function openDip(focus){
+  if(!G||G.phase!=='play'||G.over)return;
+  if(dipOpen&&focus==null)return;
+  dipOpen=true;dipWasRunning=!G.paused;G.paused=true;
+  buildDip();dipAdj=null;dipConfirm=null;
+  $('dipMsg').textContent='The game is paused while you negotiate.';
+  $('dipOv').hidden=false;updateDip();refreshUI(true);
+  if(typeof focus==='number'&&focus>0){
+    const r=dipRows.find(x=>x.n.id===focus);
+    if(r){$('dipMsg').textContent=`You are not at war with ${r.n.name}. Declare war below to attack them.`;r.el.classList.add('flash');setTimeout(()=>{r.el.scrollIntoView({block:'center'})},30);setTimeout(()=>r.el.classList.remove('flash'),2500)}
+  }
+}
+function closeDip(){
+  if(!dipOpen)return;
+  dipOpen=false;$('dipOv').hidden=true;
+  if(dipWasRunning&&G&&!G.over)G.paused=false;
+  refreshUI(true);
+}
+function toggleDip(){dipOpen?closeDip():openDip()}
+function dipClick(k,t){
+  if(k==='war'){
+    const now=performance.now();
+    if(!(dipConfirm&&dipConfirm.t===t&&now<dipConfirm.until)){dipConfirm={t,until:now+4000};updateDip();return}
+    dipConfirm=null;
+  }
+  const msg=dipDo(k,t);
+  $('dipMsg').textContent=msg;updateDip();refreshUI(true);
+}
+$('dipBtn').addEventListener('click',toggleDip);
+$('dipClose').addEventListener('click',closeDip);
+$('dipList').addEventListener('click',e=>{const b=e.target.closest('[data-dip]');if(!b||b.disabled||!G)return;dipClick(b.dataset.dip,Number(b.dataset.t))});
+$('evOpts').addEventListener('click',e=>{const b=e.target.closest('[data-ev]');if(!b||!G||!G.event)return;const m=resolveEvent(Number(b.dataset.ev));note=m||'';refreshUI(true)});
+
+if(window.ResizeObserver)new ResizeObserver(()=>{if(G)layout()}).observe(stage);
+else window.addEventListener('resize',()=>{if(G)layout()});
+
+if(window.__ITEST){
+  window.__ITEST.api={sinkShip,sinkBoat,defendSeas,boatPos,MISSILES,
+    newGame,step,get G(){return G},arrays:()=>({terr,owner}),
+    setAuto:v=>{auto=v},setDiff:v=>{diff=v},
+    autoSpawn:()=>{const c=G.nations.filter(n=>n.alive&&n.id>0&&n.tiles>=100);return pickNation(c[Math.floor(Math.random()*c.length)].id)},pickNation,LINK,RIV,NATS,
+    rollIntercept,launchNaval,upgradeBuilding,upCost,coastal,snapLand,launchMissile,sortie,tryBuild,launchAttack,buyJet,zoomAt,fitCam,clampCam,cam,recruit,startDrive,troopGrowth,troopCap,
+    declareWar,makePeace,propose,dipDo,setTreaty,endTreaty,giftTo,atWar,treatyOf,truceLeft,opinion,econ,goldRate,approvalTarget,approvalMult,issueBonds,repayBonds,genEvent,resolveEvent,aiOffer,revolt,diploTick,secondly,allyCount,warCount,rel:()=>REL,ev:()=>G.event,openDip,closeDip
+  };
+}
+if(window.innerWidth<720){$('standings').hidden=true;$('stToggle').textContent='Show'}else stage.classList.add('st-open');
+buildDock();
+newGame(newSeed());
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
