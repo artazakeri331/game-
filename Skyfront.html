@@ -2220,4 +2220,143 @@ requestAnimationFrame(frame);
 })();
 </script>
 
+<!-- ===== Skyfront multiplayer lobby (Stage 2). Self-contained; does not touch the game script above. ===== -->
+<style>
+#mpOv{position:fixed;inset:0;z-index:50;background:var(--scrim);display:flex;align-items:center;justify-content:center;font-family:var(--f-body);color:var(--ink)}
+#mpOv[hidden],#mpPill[hidden],.mpView[hidden]{display:none}
+.mpCard{width:min(420px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px}
+.mpCard h2{margin:0 0 4px;font:400 26px var(--f-display);letter-spacing:.04em}
+.mpCard p{margin:0 0 12px;color:var(--muted);font-size:13px}
+.mpCard input{width:100%;box-sizing:border-box;margin:0 0 8px;padding:9px 10px;font:600 14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px}
+.mpRow{display:flex;gap:8px;margin-bottom:8px}.mpRow>*{flex:1}.mpRow input{margin:0;text-transform:uppercase;letter-spacing:.2em;text-align:center}
+.mpCard .btn{width:100%}.mpRow .btn{width:auto}
+#mpStatus{font-size:12px;color:var(--muted);margin:0 0 10px}#mpStatus.ok{color:var(--ok)}
+#mpMsg{min-height:18px;font-size:13px;margin:6px 0 0}#mpMsg.bad{color:var(--red)}
+#mpCode{font:600 34px var(--f-mono);letter-spacing:.25em;text-align:center;margin:6px 0 10px}
+#mpList{list-style:none;margin:0 0 12px;padding:0}
+#mpList li{display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;margin-bottom:5px;font-size:14px}
+#mpList .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mpList .tag{font:600 10px var(--f-mono);padding:2px 5px;border-radius:2px;background:var(--bg);color:var(--amber)}
+#mpList .tag.off{color:var(--red)}#mpList .tag.me{color:var(--blue)}
+.mpSep{height:1px;background:var(--line);margin:12px 0}
+#mpPill{position:fixed;left:10px;top:10px;z-index:40;font:600 12px var(--f-body);padding:6px 10px;border-radius:14px;background:var(--panel);color:var(--ink);border:1px solid var(--line);cursor:pointer;opacity:.85}
+#mpPill:hover{border-color:var(--blue);opacity:1}
+</style>
+<button id="mpPill" hidden>Multiplayer</button>
+<div id="mpOv">
+  <div class="mpCard">
+    <h2>SKYFRONT</h2>
+    <p id="mpStatus">Connecting to server…</p>
+    <div class="mpView" id="mpHome">
+      <input id="mpName" maxlength="16" placeholder="Your name" autocomplete="off">
+      <button class="btn pri" id="mpCreate" disabled>Create Room</button>
+      <div class="mpSep"></div>
+      <div class="mpRow"><input id="mpJoinCode" maxlength="5" placeholder="CODE" autocomplete="off"><button class="btn" id="mpJoin" disabled>Join Room</button></div>
+      <div class="mpSep"></div>
+      <button class="btn" id="mpSolo">Play Solo</button>
+    </div>
+    <div class="mpView" id="mpRoom" hidden>
+      <p>Room code — share it with friends:</p>
+      <div id="mpCode"></div>
+      <div class="mpRow"><button class="btn" id="mpCopyCode">Copy code</button><button class="btn" id="mpCopyLink">Copy invite link</button></div>
+      <p id="mpCount"></p>
+      <ul id="mpList"></ul>
+      <p>Lobby only for now: the game itself is not shared between players yet.</p>
+      <button class="btn" id="mpClose">Close lobby (stay in room)</button>
+      <div style="height:8px"></div>
+      <button class="btn" id="mpLeave">Leave Room</button>
+    </div>
+    <div id="mpMsg"></div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const KEY='skyfrontMpSession',NKEY='skyfrontMpName';
+let sock=null,room=null,me=null,session=null,online=false,busy=false;
+try{session=JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(e){}
+try{$('mpName').value=localStorage.getItem(NKEY)||''}catch(e){}
+const qp=new URLSearchParams(location.search).get('room');
+if(qp)$('mpJoinCode').value=qp.toUpperCase().slice(0,5);
+
+function save(){try{session?sessionStorage.setItem(KEY,JSON.stringify(session)):sessionStorage.removeItem(KEY)}catch(e){}}
+function msg(t,bad){const m=$('mpMsg');m.textContent=t||'';m.className=bad?'bad':''}
+function setStatus(t,ok){const s=$('mpStatus');s.textContent=t;s.className=ok?'ok':''}
+function show(v){$('mpOv').hidden=!v;render()}
+function render(){
+  const inRoom=!!(room&&session);
+  $('mpHome').hidden=inRoom;$('mpRoom').hidden=!inRoom;
+  $('mpCreate').disabled=$('mpJoin').disabled=!online||busy;
+  if(inRoom){
+    $('mpCode').textContent=room.code;
+    $('mpCount').textContent=`Players (${room.players.length}/${room.max})`;
+    const ul=$('mpList');ul.textContent='';
+    for(const p of room.players){
+      const li=document.createElement('li'),nm=document.createElement('span');
+      nm.className='nm';nm.textContent=p.name;li.appendChild(nm);
+      const tag=(t,c)=>{const s=document.createElement('span');s.className='tag '+(c||'');s.textContent=t;li.appendChild(s)};
+      if(p.isHost)tag('HOST');
+      if(session&&p.id===session.id)tag('YOU','me');
+      if(!p.connected)tag('OFFLINE','off');
+      ul.appendChild(li);
+    }
+  }
+  $('mpPill').textContent=inRoom?`Room ${room.code} · ${room.players.length}/${room.max}`:'Multiplayer';
+  $('mpPill').hidden=!$('mpOv').hidden;
+}
+function enter(res){
+  room=res.room;me=res.you;session={code:res.room.code,token:res.you.token,id:res.you.id};
+  save();msg('');render();
+}
+function ask(ev,data,done){
+  if(!sock||!online){msg('Not connected to the server yet.',true);return}
+  busy=true;render();
+  sock.timeout(8000).emit(ev,data,(err,res)=>{
+    busy=false;
+    if(err||!res){msg('The server did not respond. Try again.',true);render();return}
+    done(res);render();
+  });
+}
+function name(){const n=$('mpName').value.trim();try{localStorage.setItem(NKEY,n)}catch(e){}return n}
+
+$('mpSolo').onclick=()=>show(false);
+$('mpClose').onclick=()=>show(false);
+$('mpPill').onclick=()=>{msg('');show(true)};
+$('mpCreate').onclick=()=>ask('create-room',{name:name()},res=>res.success?enter(res):msg(res.message,true));
+$('mpJoin').onclick=()=>ask('join-room',{code:$('mpJoinCode').value,name:name()},res=>res.success?enter(res):msg(res.message,true));
+$('mpJoinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpJoin').click()});
+$('mpLeave').onclick=()=>{
+  if(sock&&online)sock.emit('leave-room');
+  session=null;room=null;me=null;save();msg('You left the room.');render();
+};
+const copy=(t,ok)=>{
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>msg(ok),()=>msg('Copy failed. Select the text manually.',true));
+  else msg('Copy is not available in this browser.',true);
+};
+$('mpCopyCode').onclick=()=>room&&copy(room.code,'Room code copied.');
+$('mpCopyLink').onclick=()=>room&&copy(location.origin+'/?room='+room.code,'Invite link copied.');
+
+if(typeof io==='undefined'){
+  setStatus('Multiplayer is unavailable here (open the game from its server URL). Solo still works.');
+}else{
+  sock=io({reconnectionDelayMax:5000});
+  sock.on('connect',()=>{
+    online=true;setStatus('Connected',true);
+    if(session)sock.emit('rejoin-room',{code:session.code,token:session.token},res=>{
+      if(res&&res.success){enter(res);msg('Reconnected to room '+res.room.code+'.')}
+      else{session=null;room=null;save();msg((res&&res.message)||'Could not rejoin the room.',true);show(true)}
+      render();
+    });
+    render();
+  });
+  sock.on('disconnect',()=>{online=false;setStatus('Connection lost. Reconnecting…');render()});
+  sock.on('connect_error',()=>{online=false;setStatus('Connecting… the server may be waking up (can take up to a minute).');render()});
+  sock.on('room-update',r=>{if(session&&r.code===session.code){room=r;render()}});
+  sock.on('kicked',m=>{session=null;room=null;save();msg(m,true);show(true)});
+}
+render();
+})();
+</script>
+
 </body></html>
