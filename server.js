@@ -4,6 +4,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const crypto = require("crypto");
 const path = require("path");
+const { Worker } = require("worker_threads");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -34,6 +35,7 @@ app.get(["/", "/Skyfront.html"], (req, res) => {
 const rooms = new Map();
 const MAX_PLAYERS_PER_ROOM = 8;
 const MAX_ROOMS = 25;               // protects a small free Render instance
+const MAX_WORLDS = Number(process.env.MAX_WORLDS) || 4;   // simulated worlds at once (each ~50 MB; free Render has 512 MB)
 const GRACE_MS = Number(process.env.GRACE_MS) || 60 * 1000;        // seat is held this long after a disconnect
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_RE = /^[A-Z2-9]{5}$/;
@@ -61,8 +63,10 @@ function publicRoom(room) {
     code: room.code,
     max: MAX_PLAYERS_PER_ROOM,
     hostId: room.hostId,
+    world: { state: room.world.state, seed: room.world.seed, rev: room.world.rev, error: room.world.error || null },
     players: [...room.players.values()].map((p) => ({
-      id: p.id, name: p.name, connected: p.connected, isHost: p.id === room.hostId
+      id: p.id, name: p.name, connected: p.connected, isHost: p.id === room.hostId,
+      nation: p.nation === null ? null : p.nation, nationName: p.nation === null ? null : (room.world.names[p.nation] || null)
     }))
   };
 }
@@ -78,10 +82,86 @@ function ensureHost(room) {
   if (next) room.hostId = next.id;
 }
 
+// ---------------- Shared world (Stage 3) ----------------
+function newWorld() {
+  return { state: "none", seed: 0, rev: 0, worker: null, ids: new Set(), names: [], error: null, pending: new Map(), seq: 0 };
+}
+function worldsInUse() {
+  let n = 0;
+  for (const r of rooms.values()) if (r.world.worker) n++;
+  return n;
+}
+function disposeWorld(room) {
+  const w = room.world;
+  if (w.worker) { w.worker.removeAllListeners(); w.worker.terminate(); w.worker = null; }
+  for (const p of w.pending.values()) p.reject(new Error("World closed"));
+  w.pending.clear();
+}
+function worldCall(room, cmd, extra) {
+  const w = room.world;
+  return new Promise((resolve, reject) => {
+    if (!w.worker) return reject(new Error("World not available"));
+    const id = ++w.seq;
+    w.pending.set(id, { resolve, reject });
+    w.worker.postMessage({ id, cmd, ...extra });
+  });
+}
+function startWorld(room) {
+  const w = room.world;
+  w.state = "building"; w.error = null; w.rev++;
+  w.seed = 1000 + Math.floor(Math.random() * 9000);
+  const worker = new Worker(path.join(__dirname, "sim-worker.js"));
+  w.worker = worker;
+  const fail = (msg) => {
+    if (w.worker !== worker) return;
+    console.error(`Room ${room.code} world failed:`, msg);
+    disposeWorld(room);
+    w.state = "error"; w.error = "World generation failed. Try again."; broadcast(room);
+  };
+  worker.on("message", (m) => {
+    const p = w.pending.get(m.id);
+    if (!p) return;
+    w.pending.delete(m.id);
+    m.ok ? p.resolve(m) : p.reject(new Error(m.error));
+  });
+  worker.on("error", (e) => fail(e.message));
+  worker.on("exit", () => fail("worker exited"));
+  worldCall(room, "init", { seed: w.seed }).then((m) => {
+    if (w.worker !== worker) return;
+    w.ids = new Set(m.ids); w.names = m.names; w.state = "ready";
+    console.log(`Room ${room.code} world ready (seed ${w.seed})`);
+    broadcast(room);
+  }, (e) => fail(e.message));
+}
+function releaseClaim(room, player) {
+  if (player.nation !== null && room.claims.get(player.nation) === player.id) room.claims.delete(player.nation);
+  player.nation = null;
+}
+function ctxOf(socket) {
+  const room = rooms.get(socket.data.roomCode);
+  const player = room && room.players.get(socket.data.playerId);
+  return player ? { room, player } : null;
+}
+function claimNation(room, player, id) {
+  const holderId = room.claims.get(id);
+  if (holderId === player.id) return { success: true, nation: id, name: room.world.names[id] };
+  if (holderId) {
+    const h = room.players.get(holderId);
+    return { success: false, message: `${room.world.names[id]} is already led by ${h ? h.name : "another player"}.` };
+  }
+  releaseClaim(room, player);           // switching countries frees the old one
+  room.claims.set(id, player.id);
+  player.nation = id;
+  broadcast(room);
+  return { success: true, nation: id, name: room.world.names[id] };
+}
+
 function removePlayer(room, player) {
   clearTimeout(player.timer);
+  releaseClaim(room, player);
   room.players.delete(player.id);
   if (room.players.size === 0) {
+    disposeWorld(room);
     rooms.delete(room.code);
     console.log(`Room ${room.code} deleted`);
     return;
@@ -118,7 +198,7 @@ function joinOk(room, player) {
 function addPlayer(socket, room, name) {
   const player = {
     id: String(room.nextId++), token: crypto.randomBytes(12).toString("hex"),
-    name: cleanName(name, room), socketId: null, connected: false, timer: null
+    name: cleanName(name, room), socketId: null, connected: false, timer: null, nation: null
   };
   room.players.set(player.id, player);
   attach(socket, room, player);
@@ -139,7 +219,7 @@ io.on("connection", (socket) => {
     detach(socket);
     let code;
     do { code = makeRoomCode(); } while (rooms.has(code));
-    const room = { code, hostId: null, nextId: 1, players: new Map() };
+    const room = { code, hostId: null, nextId: 1, players: new Map(), claims: new Map(), world: newWorld() };
     rooms.set(code, room);
     const player = addPlayer(socket, room, data.name);
     room.hostId = player.id;
@@ -185,9 +265,55 @@ io.on("connection", (socket) => {
     console.log(`Player rejoined room ${room.code}`);
   });
 
-  socket.on("leave-room", (a) => {
+  socket.on("create-world", (a, b) => {
+    const [, cb] = args(a, b);
+    const c = ctxOf(socket);
+    if (!c) return safeCallback(cb, { success: false, message: "Join a room first." });
+    if (c.room.hostId !== c.player.id) return safeCallback(cb, { success: false, message: "Only the host can create the world." });
+    if (c.room.world.state === "building" || c.room.world.state === "ready") return safeCallback(cb, { success: false, message: "The world already exists." });
+    if (worldsInUse() >= MAX_WORLDS) return safeCallback(cb, { success: false, message: `The server is running its maximum of ${MAX_WORLDS} active games. Try again later.` });
+    startWorld(c.room);
+    safeCallback(cb, { success: true });
+    broadcast(c.room);
+  });
+
+  socket.on("world-get", async (a, b) => {
+    const [, cb] = args(a, b);
+    const c = ctxOf(socket);
+    if (!c) return safeCallback(cb, { success: false, message: "Join a room first." });
+    if (c.room.world.state !== "ready") return safeCallback(cb, { success: false, message: "The world is not ready yet." });
+    try {
+      const m = await worldCall(c.room, "snapshot");   // always the room's current state
+      safeCallback(cb, { success: true, rev: c.room.world.rev, seed: m.seed, snapshot: m.snapshot });
+    } catch (e) {
+      safeCallback(cb, { success: false, message: "Could not read the world. Try again." });
+    }
+  });
+
+  socket.on("claim-nation", (a, b) => {
+    const [data, cb] = args(a, b);
+    const c = ctxOf(socket);
+    if (!c) return safeCallback(cb, { success: false, message: "Join a room first." });
+    if (c.room.world.state !== "ready") return safeCallback(cb, { success: false, message: "The world has not been created yet." });
+    const id = Number(data.nation);
+    if (!Number.isInteger(id) || !c.room.world.ids.has(id)) return safeCallback(cb, { success: false, message: "That country cannot be led. Pick a coloured country." });
+    safeCallback(cb, claimNation(c.room, c.player, id));
+  });
+
+  socket.on("claim-random", (a, b) => {
+    const [, cb] = args(a, b);
+    const c = ctxOf(socket);
+    if (!c) return safeCallback(cb, { success: false, message: "Join a room first." });
+    if (c.room.world.state !== "ready") return safeCallback(cb, { success: false, message: "The world has not been created yet." });
+    const free = [...c.room.world.ids].filter((id) => !c.room.claims.has(id));
+    if (!free.length) return safeCallback(cb, { success: false, message: "No free countries left." });
+    safeCallback(cb, claimNation(c.room, c.player, free[Math.floor(Math.random() * free.length)]));
+  });
+
+  socket.on("leave-room", (a, b) => {
+    const [, cb] = args(a, b);
     detach(socket);
-    safeCallback(typeof a === "function" ? a : undefined, { success: true });
+    safeCallback(cb, { success: true });
   });
 
   socket.on("disconnect", () => {

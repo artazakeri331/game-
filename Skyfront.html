@@ -488,9 +488,11 @@ function pickNation(k){
 function trySpawn(x,y){
   const i=y*MW+x,o=owner[i];
   if(!terr[i]||o<1){note='Click a coloured country to lead it. Grey land is unclaimed.';return false}
+  if(MPH.on)return MPH.pick(o);
   return pickNation(o);
 }
 function randomSpawn(){
+  if(MPH.on){MPH.random();return}
   const c=G.nations.filter(n=>n.alive&&n.id>0&&n.tiles>=100);
   pickNation(c[Math.floor(Math.random()*c.length)].id);refreshUI(true);
 }
@@ -2213,9 +2215,19 @@ if(window.__ITEST){
     declareWar,makePeace,propose,dipDo,setTreaty,endTreaty,giftTo,atWar,treatyOf,truceLeft,opinion,econ,goldRate,approvalTarget,approvalMult,issueBonds,repayBonds,genEvent,resolveEvent,aiOffer,revolt,diploTick,secondly,allyCount,warCount,rel:()=>REL,ev:()=>G.event,openDip,closeDip
   };
 }
+/* ---------- multiplayer hook (Stage 3): inert unless a room attaches handlers, so solo play is unchanged ---------- */
+const MPH={on:false,pick:null,random:null};
+window.__SKY=Object.assign(window.__SKY||{},{
+  MW,MH,NCOUNT,newGame,step,
+  state:()=>({seed:G.seed,terr,owner,scorch,orig,G,REL,cam}),
+  load(s){newGame(s.seed);terr.set(s.terr);owner.set(s.owner);scorch.set(s.scorch);orig.set(s.orig);G=s.G;for(const k in s.REL)REL[k]=s.REL[k];paintAll();layout();buildStandings();refreshUI(true)},
+  attach(h){MPH.on=true;MPH.pick=h.pick;MPH.random=h.random},
+  detach(regen){if(!MPH.on)return;MPH.on=false;MPH.pick=MPH.random=null;if(regen!==false)newGame(newSeed())},
+  say(t){note=t;if(G)refreshUI(true)}
+});
 if(window.innerWidth<720){$('standings').hidden=true;$('stToggle').textContent='Show'}else stage.classList.add('st-open');
 buildDock();
-newGame(newSeed());
+newGame(window.__SKY_SEED||newSeed());
 requestAnimationFrame(frame);
 })();
 </script>
@@ -2236,6 +2248,7 @@ requestAnimationFrame(frame);
 #mpList{list-style:none;margin:0 0 12px;padding:0}
 #mpList li{display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;margin-bottom:5px;font-size:14px}
 #mpList .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mpList .nat{font-size:12px;color:var(--ok);white-space:nowrap}
 #mpList .tag{font:600 10px var(--f-mono);padding:2px 5px;border-radius:2px;background:var(--bg);color:var(--amber)}
 #mpList .tag.off{color:var(--red)}#mpList .tag.me{color:var(--blue)}
 .mpSep{height:1px;background:var(--line);margin:12px 0}
@@ -2261,8 +2274,10 @@ requestAnimationFrame(frame);
       <div class="mpRow"><button class="btn" id="mpCopyCode">Copy code</button><button class="btn" id="mpCopyLink">Copy invite link</button></div>
       <p id="mpCount"></p>
       <ul id="mpList"></ul>
-      <p>Lobby only for now: the game itself is not shared between players yet.</p>
-      <button class="btn" id="mpClose">Close lobby (stay in room)</button>
+      <p id="mpWorld"></p>
+      <button class="btn pri" id="mpMakeWorld" hidden>Create World</button>
+      <div style="height:8px"></div>
+      <button class="btn" id="mpClose">Show map (stay in room)</button>
       <div style="height:8px"></div>
       <button class="btn" id="mpLeave">Leave Room</button>
     </div>
@@ -2274,7 +2289,7 @@ requestAnimationFrame(frame);
 (()=>{
 const $=id=>document.getElementById(id);
 const KEY='skyfrontMpSession',NKEY='skyfrontMpName';
-let sock=null,room=null,me=null,session=null,online=false,busy=false;
+let sock=null,room=null,me=null,session=null,online=false,busy=false,loadedRev=0,loading=false;
 try{session=JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(e){}
 try{$('mpName').value=localStorage.getItem(NKEY)||''}catch(e){}
 const qp=new URLSearchParams(location.search).get('room');
@@ -2295,6 +2310,7 @@ function render(){
     for(const p of room.players){
       const li=document.createElement('li'),nm=document.createElement('span');
       nm.className='nm';nm.textContent=p.name;li.appendChild(nm);
+      if(p.nationName){const nt=document.createElement('span');nt.className='nat';nt.textContent=p.nationName;li.appendChild(nt)}
       const tag=(t,c)=>{const s=document.createElement('span');s.className='tag '+(c||'');s.textContent=t;li.appendChild(s)};
       if(p.isHost)tag('HOST');
       if(session&&p.id===session.id)tag('YOU','me');
@@ -2302,12 +2318,64 @@ function render(){
       ul.appendChild(li);
     }
   }
+  if(inRoom){
+    const w=room.world,host=session&&room.hostId===session.id;
+    $('mpMakeWorld').hidden=!(host&&(w.state==='none'||w.state==='error'));$('mpMakeWorld').disabled=busy;
+    $('mpWorld').textContent=w.state==='none'?(host?'Everyone is in? Create the world to start choosing countries.':'Waiting for the host to create the world.')
+      :w.state==='building'?'Generating the world… this can take up to a minute.'
+      :w.state==='error'?(w.error||'World generation failed.')
+      :loadedRev===w.rev?'World ready (map #'+w.seed+'). Show the map and click a country to lead it. Gameplay is not shared yet.':'Loading the world…';
+  }
   $('mpPill').textContent=inRoom?`Room ${room.code} · ${room.players.length}/${room.max}`:'Multiplayer';
   $('mpPill').hidden=!$('mpOv').hidden;
 }
 function enter(res){
   room=res.room;me=res.you;session={code:res.room.code,token:res.you.token,id:res.you.id};
-  save();msg('');render();
+  save();msg('');attachMp();render();sync();
+}
+const SKY=()=>window.__SKY;
+function attachMp(){
+  if(!SKY())return;
+  SKY().attach({
+    pick(id){
+      if(loadedRev!==(room&&room.world.rev)){SKY().say('The world is still loading. Open the Multiplayer panel to check.');return false}
+      sock.emit('claim-nation',{nation:id},res=>SKY().say(res&&res.success?'You lead '+(res.name||'your country')+'. Other players can see your choice.':(res&&res.message)||'Could not claim that country.'));
+      return true;
+    },
+    random(){
+      if(loadedRev!==(room&&room.world.rev)){SKY().say('The world is still loading.');return}
+      sock.emit('claim-random',{},res=>SKY().say(res&&res.success?'You lead '+res.name+'.':(res&&res.message)||'Could not claim a country.'));
+    }
+  });
+}
+function detachMp(){if(SKY()&&SKY().detach)SKY().detach(loadedRev!==0);loadedRev=0;loading=false}
+async function inflate(buf){const st=new Blob([buf]).stream().pipeThrough(new DecompressionStream('deflate'));return new Uint8Array(await new Response(st).arrayBuffer())}
+function dec(v){
+  if(v===null||typeof v!=='object')return v;
+  if(Array.isArray(v))return v.map(dec);
+  if(v.$n!==undefined)return Number(v.$n);
+  if(v.$t){const bin=atob(v.b),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new window[v.$t](u.buffer)}
+  if(v.$m)return new Map(v.$m.map(([k,x])=>[dec(k),dec(x)]));
+  const o={};for(const k in v)o[k]=dec(v[k]);return o;
+}
+async function applySnapshot(buf){
+  const u=await inflate(buf),L=new DataView(u.buffer).getUint32(0,true),N=SKY().MW*SKY().MH;
+  const meta=JSON.parse(new TextDecoder().decode(u.subarray(4,4+L)));let o=4+L;
+  const take=(T)=>{const a=new T(u.buffer.slice(o,o+N));o+=N;return a};
+  const terr=take(Uint8Array),owner=take(Int8Array),scorch=take(Uint8Array),orig=take(Int8Array);
+  SKY().load({seed:meta.seed,terr,owner,scorch,orig,G:dec(meta.G),REL:dec(meta.REL)});
+}
+function sync(){
+  if(!sock||!online||!room||!session||room.world.state!=='ready'||room.world.rev===loadedRev||loading||!SKY())return;
+  const want=room.world.rev;loading=true;
+  sock.emit('world-get',{},async res=>{
+    try{
+      if(!res||!res.success)throw new Error((res&&res.message)||'no response');
+      await applySnapshot(res.snapshot);loadedRev=res.rev;msg('');
+    }catch(e){msg('Could not load the world: '+e.message,true)}
+    loading=false;render();
+    if(room&&room.world.rev!==loadedRev&&loadedRev!==want)sync();
+  });
 }
 function ask(ev,data,done){
   if(!sock||!online){msg('Not connected to the server yet.',true);return}
@@ -2322,13 +2390,14 @@ function name(){const n=$('mpName').value.trim();try{localStorage.setItem(NKEY,n
 
 $('mpSolo').onclick=()=>show(false);
 $('mpClose').onclick=()=>show(false);
+$('mpMakeWorld').onclick=()=>ask('create-world',{},res=>{if(!res.success)msg(res.message,true)});
 $('mpPill').onclick=()=>{msg('');show(true)};
 $('mpCreate').onclick=()=>ask('create-room',{name:name()},res=>res.success?enter(res):msg(res.message,true));
 $('mpJoin').onclick=()=>ask('join-room',{code:$('mpJoinCode').value,name:name()},res=>res.success?enter(res):msg(res.message,true));
 $('mpJoinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('mpJoin').click()});
 $('mpLeave').onclick=()=>{
   if(sock&&online)sock.emit('leave-room');
-  session=null;room=null;me=null;save();msg('You left the room.');render();
+  session=null;room=null;me=null;save();detachMp();msg('You left the room.');render();
 };
 const copy=(t,ok)=>{
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(()=>msg(ok),()=>msg('Copy failed. Select the text manually.',true));
@@ -2345,15 +2414,15 @@ if(typeof io==='undefined'){
     online=true;setStatus('Connected',true);
     if(session)sock.emit('rejoin-room',{code:session.code,token:session.token},res=>{
       if(res&&res.success){enter(res);msg('Reconnected to room '+res.room.code+'.')}
-      else{session=null;room=null;save();msg((res&&res.message)||'Could not rejoin the room.',true);show(true)}
+      else{session=null;room=null;save();detachMp();msg((res&&res.message)||'Could not rejoin the room.',true);show(true)}
       render();
     });
     render();
   });
   sock.on('disconnect',()=>{online=false;setStatus('Connection lost. Reconnecting…');render()});
   sock.on('connect_error',()=>{online=false;setStatus('Connecting… the server may be waking up (can take up to a minute).');render()});
-  sock.on('room-update',r=>{if(session&&r.code===session.code){room=r;render()}});
-  sock.on('kicked',m=>{session=null;room=null;save();msg(m,true);show(true)});
+  sock.on('room-update',r=>{if(session&&r.code===session.code){room=r;render();sync()}});
+  sock.on('kicked',m=>{session=null;room=null;save();detachMp();msg(m,true);show(true)});
 }
 render();
 })();
