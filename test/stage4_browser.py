@@ -116,12 +116,15 @@ try:
 
         # solo regression with the original click paths (never touched multiplayer)
         S = mk("S"); S.click("#mpSolo"); time.sleep(.3)
-        plan = S.evaluate(PLAN, [])
-        S.evaluate(CENTER, plan["own"]); S.evaluate("()=>{}")
-        S.evaluate("(i)=>{const c=window.__SKY.state().cam;c.z=Math.min(c.z,3)}", plan["own"])
-        S.click("#randomSpawn"); time.sleep(1.2)
+        # Spawn by really clicking the nation with the longest unclaimed frontier, so unclaimed land is still there to attack after the AIs expand
+        pick = S.evaluate("""() => { const S = window.__SKY, s = S.state(), MW = S.MW, N = s.owner.length, cnt = {}, tile = {};
+          for (let i = 0; i < N; i++) { const o = s.owner[i]; if (o < 1 || !s.terr[i]) continue; if (!(o in tile)) tile[o] = i; const x = i % MW;
+            for (const j of [x > 0 ? i - 1 : -1, x < MW - 1 ? i + 1 : -1, i - MW, i + MW]) if (j >= 0 && j < N && s.owner[j] === -1 && s.terr[j]) { cnt[o] = (cnt[o] || 0) + 1; break; } }
+          let best = -1, bc = 0; for (const k in cnt) { const n = s.G.nations[k]; if (n.alive && n.tiles >= 100 && cnt[k] > bc) { bc = cnt[k]; best = +k; } }
+          return { nation: best, tile: tile[best], edge: bc }; }""")
+        click_tile(S, pick["tile"]); time.sleep(1.2)
         st = S.evaluate("()=>{const s=window.__SKY.state();return {phase:s.G.phase,alive:s.G.nations[0].alive,t:s.G.t}}")
-        check("solo: spawn uses the original pickNation (nation 0 becomes the player)", st["phase"] == "play" and st["alive"])
+        check("solo: clicking a country spawns through the original pickNation (nation 0 becomes the player)", st["phase"] == "play" and st["alive"], str(st))
         time.sleep(2.2)
         st2 = S.evaluate("()=>({t:window.__SKY.state().G.t})")
         check("solo: the client still runs its own simulation locally", st2["t"] > st["t"] + 1.0, f"{st['t']}->{st2['t']}")
@@ -136,16 +139,19 @@ try:
         FRESH = """() => { const S = window.__SKY, s = S.state(), MW = S.MW, N = s.owner.length;
           for (let i = 0; i < N; i++) { if (s.owner[i] !== 0 || !s.terr[i]) continue; const x = i % MW;
             for (const j of [x > 0 ? i - 1 : -1, x < MW - 1 ? i + 1 : -1, i - MW, i + MW]) if (j >= 0 && j < N && s.owner[j] === -1 && s.terr[j]) return j; } return -1; }"""
-        launched = False
+        launched = False; why = ""
         S.click('[data-tab="attack"]')
-        n_before = S.evaluate("()=>window.__SKY.state().G.dbg.neutAtk")
         for _ in range(4):
             tgt = S.evaluate(FRESH)
-            if tgt < 0: break
-            click_tile(S, tgt); time.sleep(.3)
-            # launchAttack() increments G.dbg.neutAtk for every launch on unclaimed land (a tiny front may finish within a tick)
-            if S.evaluate("()=>window.__SKY.state().G.dbg.neutAtk") > n_before: launched = True; break
-        check("solo: attacking unclaimed land works locally through the original code path", launched, status(S)[:80])
+            if tgt < 0: why = "no unclaimed border tile left"; break
+            S.evaluate(CENTER, tgt); time.sleep(.25)
+            before = S.evaluate("()=>window.__SKY.state().G.nations[0].troops")
+            pt = S.evaluate(SCREEN, tgt); S.mouse.click(pt["x"], pt["y"]); time.sleep(.3)
+            after = S.evaluate("()=>window.__SKY.state().G.nations[0].troops")
+            # the default slider sends 80% of troops: only a real launch of MY nation can drop MY troops that much (AI activity cannot)
+            why = f"troops {before:.0f}->{after:.0f}"
+            if after < before * 0.6: launched = True; break
+        check("solo: attacking unclaimed land works locally through the original code path (my troops were sent)", launched, why + " | " + status(S)[:60])
         S.keyboard.press("Space"); time.sleep(.3)
         check("solo: Space still pauses the game", S.evaluate(STATE)["paused"])
         S.click("#mpPill"); time.sleep(.2)
