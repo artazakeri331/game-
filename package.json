@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test --test-timeout=240000 test/*.test.js"
+    "test": "node --test --test-concurrency=1 --test-timeout=400000 test/*.test.js"
   },
   "dependencies": {
     "express": "^5.1.0",

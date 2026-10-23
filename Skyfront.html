@@ -310,6 +310,7 @@ const MONO="'IBM Plex Mono',ui-monospace,Menlo,monospace";
 const reduced=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 let G=null,mode='attack',tab='attack',hover=null,note='',diff='normal',CW=0,CH=0,dirty=false,acc=0,auto=false;
+const MPH={on:false,srv:false,me:0,pick:null,random:null,tap:null}; // multiplayer hooks: inert in solo play
 const cam={x:0,y:0,z:4,minZ:1,maxZ:40};
 let needFit=true;
 const terr=new Uint8Array(N),owner=new Int8Array(N),depth=new Uint8Array(N),vari=new Uint8Array(N),scorch=new Uint8Array(N);
@@ -744,6 +745,7 @@ function propose(from,to,kind){
 const mendCost=()=>Math.max(300,giftAmount()*8);
 const giftAmount=()=>Math.max(50,Math.round(Math.max(1,goldRate(P()))*10/10)*10);
 function dipDo(kind,t){
+  if(MPH.on)return 'Diplomacy is not available in multiplayer yet.';
   const X=G.nations[t],p=P();
   if(G.over||!p.alive||!X.alive)return 'That is not possible now.';
   if(kind==='war'){const r=declareWar(0,t);return r||`War declared on ${X.name}. Close this panel and click their land to attack.`}
@@ -1280,7 +1282,7 @@ function buySat(n){
 }
 function troopTxt(n){
   if(!n.alive)return '';
-  if(n.id===0||intelLv()>=2)return fmt(n.troops);
+  if(n.id===P().id||intelLv()>=2)return fmt(n.troops);
   if(intelLv()<1)return '?';
   const m=Math.pow(10,Math.max(0,String(Math.round(n.troops)).length-2));return '~'+fmt(Math.round(n.troops/m)*m);
 }
@@ -1548,27 +1550,28 @@ function secondly(){
   for(const n of alive)if(n.tiles/G.land>=WIN_SHARE){winner=n;why=`${n.human?'You hold':n.name+' holds'} ${Math.round(n.tiles/G.land*100)}% of the land.`}
   if(!winner&&G.blocT>=BLOC_TIME){winner=P();why=`Your alliance bloc holds ${Math.round(G.bloc*100)}% of the world.`}
   if(!winner&&alive.length===1){winner=alive[0];why='Last nation standing.'}
-  if(!winner&&!G.nations[0].alive&&!auto){winner=alive[0]||null;why='Your nation fell.'}
+  if(!winner&&!G.nations[0].alive&&!auto&&!MPH.srv){winner=alive[0]||null;why='Your nation fell.'}
   if(winner||!alive.length){G.over={winner:winner?winner.id:-1,why};G.paused=true;showEnd()}
 }
 
 /* ---------- player actions ---------- */
-const P=()=>G.nations[0];
+const P=()=>G.nations[MPH.me||0];
 function playerCan(){return G&&G.phase==='play'&&!G.over&&!G.paused&&P().alive}
 function describe(x,y){
   const i=y*MW+x,t=terr[i];
   if(!t)return `${x},${y} · Water`;
   const o=owner[i],b=G.bat.get(i);
-  const rel=o>0?(atWar(0,o)?' · AT WAR':treatyOf(0,o)===2?' · ally':treatyOf(0,o)===1?' · trade partner':' · not at war (click to open Diplomacy)'):'';
+  const rel=o>0?(atWar(P().id,o)?' · AT WAR':treatyOf(P().id,o)===2?' · ally':treatyOf(P().id,o)===1?' · trade partner':' · not at war (click to open Diplomacy)'):'';
   let est='';
-  if(mode==='attack'&&o>0&&atWar(0,o)){const d=G.nations[o],dens=Math.max(1,d.troops/Math.max(1,d.tiles)),tr=P().troops*Number($('ratio').value)/100,c=dens*.9*TMUL[t]+1;est=intelLv()>=2?` · they hold ${dens.toFixed(1)} troops/tile: your ${fmt(tr)} troops take about ${Math.floor(tr/c)} tiles here`:' · buy satellites (Air tab) to see the odds';}
-  return `${x},${y} · ${TNAME[t]} · ${o<0?'Unclaimed':G.nations[o].name}${rel}${est}${(o>=0&&o!==0&&orig[i]===0)?' · your homeland: cheap to retake':''}${b?' · '+BUILD[b.type].name+' L'+b.lv:''}`;
+  if(mode==='attack'&&o>0&&atWar(P().id,o)){const d=G.nations[o],dens=Math.max(1,d.troops/Math.max(1,d.tiles)),tr=P().troops*Number($('ratio').value)/100,c=dens*.9*TMUL[t]+1;est=intelLv()>=2?` · they hold ${dens.toFixed(1)} troops/tile: your ${fmt(tr)} troops take about ${Math.floor(tr/c)} tiles here`:' · buy satellites (Air tab) to see the odds';}
+  return `${x},${y} · ${TNAME[t]} · ${o<0?'Unclaimed':G.nations[o].name}${rel}${est}${(o>=0&&o!==P().id&&orig[i]===P().id)?' · your homeland: cheap to retake':''}${b?' · '+BUILD[b.type].name+' L'+b.lv:''}`;
 }
 function onTap(e){
   if(!G)return;
   const c=tileFromEvent(e);if(!c)return;
   if(G.phase==='spawn'){trySpawn(c.x,c.y);refreshUI(true);return}
   if(G.over)return;
+  if(MPH.on){note=MPH.tap?MPH.tap(mode,c,Number($('ratio').value)):'';refreshUI(true);return}
   if(G.paused){note='Paused. Press Space to resume.';refreshUI(true);return}
   hideWarPrompt();
   const i=c.y*MW+c.x,p=P();let msg='';
@@ -1766,10 +1769,10 @@ function buildDock(){
     }
   }
   $('ratio').addEventListener('input',e=>{$('ratioVal').textContent=e.target.value+'%'});
-  $('tax').addEventListener('input',e=>{if(!G)return;P().tax=clamp(Number(e.target.value)/100,0,TAX_MAX);updateEcon()});
+  $('tax').addEventListener('input',e=>{if(!G||MPH.on)return;P().tax=clamp(Number(e.target.value)/100,0,TAX_MAX);updateEcon()});
   $('bondBtn').addEventListener('click',()=>{if(!G||G.over)return;note=issueBonds(0);refreshUI(true)});
   $('repayBtn').addEventListener('click',()=>{if(!G||G.over)return;note=repayBonds(0);refreshUI(true)});
-  $('retreatBtn').addEventListener('click',()=>{if(!G)return;G.attacks.filter(a=>a.atk===0).forEach(endAttack);note='Attacks recalled.';refreshUI(true)});
+  $('retreatBtn').addEventListener('click',()=>{if(!G)return;if(MPH.on){note='Not available in multiplayer yet.';refreshUI(true);return}G.attacks.filter(a=>a.atk===0).forEach(endAttack);note='Attacks recalled.';refreshUI(true)});
 }
 function setTab(t){
   tab=t;mode='attack';note='';
@@ -1821,17 +1824,17 @@ function buildStandings(){
   }
 }
 function relKey(id){
-  if(id===0)return '';
-  if(atWar(0,id))return 'war';
-  const t=treatyOf(0,id);
+  if(id===P().id)return '';
+  if(atWar(P().id,id))return 'war';
+  const t=treatyOf(P().id,id);
   if(t===2)return 'ally';
   if(t===1)return 'trade';
-  return truceLeft(0,id)>0?'truce':'';
+  return truceLeft(P().id,id)>0?'truce':'';
 }
 function updateStandings(){
   const sorted=G.rows.slice().sort((a,b)=>b.n.tiles-a.n.tiles);
   sorted.forEach((r,k)=>{
-    r.el.style.order=k;r.el.hidden=!(r.n.alive||r.n.spawned);r.el.classList.toggle('dead',G.phase==='play'&&!r.n.alive&&r.n.spawned);
+    if(MPH.on)r.el.classList.toggle('me',r.n.id===MPH.me);r.el.style.order=k;r.el.hidden=!(r.n.alive||r.n.spawned);r.el.classList.toggle('dead',G.phase==='play'&&!r.n.alive&&r.n.spawned);
     r.el.dataset.rel=G.phase==='play'&&r.n.alive?relKey(r.n.id):'';
     r.tr.textContent=troopTxt(r.n);
     r.pc.textContent=r.n.tiles?pct(r.n.tiles/G.land):'0%';
@@ -1854,7 +1857,7 @@ function updateHud(){
   $('pauseBtn').firstChild.textContent=G.paused&&G.phase==='play'?'Resume':'Pause';
 }
 function updateAttackInfo(){
-  const p=P(),mine=G.attacks.filter(a=>a.atk===0);
+  const p=P(),mine=G.attacks.filter(a=>a.atk===P().id);
   $('attackInfo').innerHTML=`<span>Troops <b>${fmt(p.troops)}</b> / ${fmt(troopCap(p))} · Cities <b>${p.cnt.city}</b> · Barracks <b>${p.cnt.barracks}</b> · Silos <b>${p.cnt.silo}</b> · SAMs <b>${p.cnt.sam}</b></span>`+
     `<span>${mine.length?mine.map(a=>`→ ${a.def<0?'Unclaimed':G.nations[a.def].name} <b>${fmt(a.troops)}</b>`).join(' · '):'No attacks underway'}</span>`;
 }
@@ -1902,7 +1905,7 @@ function refreshUI(force){
   $('dipBtn').disabled=spawn||!!G.over;
 }
 function showEnd(){
-  const o=$('overlay'),w=G.over.winner,win=w===0;
+  const o=$('overlay'),w=G.over.winner,win=w===P().id;
   const name=w>=0?G.nations[w].name:'Nobody';
   o.innerHTML=`<div class="result"><h2 class="${win?'win':'lose'}">${win?'Victory':'Defeat'}</h2><p>${win?G.over.why:`${name} wins. ${G.over.why}`} Time ${fmtTime(G.t)}.</p><button class="btn pri" id="againBtn">Play again</button></div>`;
   o.hidden=false;
@@ -1950,11 +1953,11 @@ function draw(now){
   for(const n of G.nations){
     if(!n.alive||n.tiles<12)continue;
     const raw=Math.sqrt(n.tiles)*z*.5;if(raw<6.5)continue;
-    const fs=clamp(raw,10,30),lab=(raw>=13||n.human)?(n.human?'YOU':n.name.toUpperCase()):CC[n.id];
+    const fs=clamp(raw,10,30),lab=(raw>=13||n.id===P().id)?(n.id===P().id?'YOU':n.name.toUpperCase()):CC[n.id];
     ctx.font=`600 ${px(fs)}px ${MONO}`;
     ctx.lineWidth=px(3.5);ctx.strokeStyle='rgba(6,16,24,.75)';ctx.strokeText(lab,n.cx+.5,n.cy+.5);
     ctx.fillStyle='#f4f8fa';ctx.fillText(lab,n.cx+.5,n.cy+.5);
-    if(!n.human&&raw>=11&&intelLv()>=1){const tt=troopTxt(n),fs2=Math.max(9,fs*.7);ctx.font=`500 ${px(fs2)}px ${MONO}`;ctx.lineWidth=px(3);ctx.strokeText(tt,n.cx+.5,n.cy+.5+px(fs*.95));ctx.fillStyle='#ffd27a';ctx.fillText(tt,n.cx+.5,n.cy+.5+px(fs*.95))}
+    if(n.id!==P().id&&raw>=11&&intelLv()>=1){const tt=troopTxt(n),fs2=Math.max(9,fs*.7);ctx.font=`500 ${px(fs2)}px ${MONO}`;ctx.lineWidth=px(3);ctx.strokeText(tt,n.cx+.5,n.cy+.5+px(fs*.95));ctx.fillStyle='#ffd27a';ctx.fillText(tt,n.cx+.5,n.cy+.5+px(fs*.95))}
   }
   if(z<4){
     for(const b of G.blds){
@@ -2012,8 +2015,8 @@ function draw(now){
       ctx.beginPath();ctx.arc(x,y,Math.max(px(5),M.r),0,7);ctx.stroke();
       if(M.n>1){ctx.setLineDash([px(5),px(5)]);ctx.beginPath();ctx.arc(x,y,M.spread,0,7);ctx.stroke();ctx.setLineDash([])}
     }else if(mode==='j:bomber'){ctx.strokeStyle='#f2b84b';ctx.beginPath();ctx.arc(x,y,Math.max(px(5),BOMB_R),0,7);ctx.stroke()}
-    else if(mode==='u:up'){const bb=G.bat.get(hover.y*MW+hover.x);ctx.strokeStyle=bb&&bb.owner===0&&bb.lv<MAXLV?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x-.5,hover.y-.5,2,2)}
-    else if(mode.startsWith('b:')){const i=hover.y*MW+hover.x,ok=owner[i]===0&&terr[i]&&!G.bat.has(i)&&(mode!=='b:mine'||terr[i]===3)&&(mode!=='b:port'||coastal(i));ctx.strokeStyle=ok?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x,hover.y,1,1)}
+    else if(mode==='u:up'){const bb=G.bat.get(hover.y*MW+hover.x);ctx.strokeStyle=bb&&bb.owner===P().id&&bb.lv<MAXLV?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x-.5,hover.y-.5,2,2)}
+    else if(mode.startsWith('b:')){const i=hover.y*MW+hover.x,ok=owner[i]===P().id&&terr[i]&&!G.bat.has(i)&&(mode!=='b:mine'||terr[i]===3)&&(mode!=='b:port'||coastal(i));ctx.strokeStyle=ok?'#6fd49a':'#ff5a4d';ctx.strokeRect(hover.x,hover.y,1,1)}
     else{ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=px(1.5);ctx.strokeRect(hover.x,hover.y,1,1)}
   }
 }
@@ -2023,7 +2026,7 @@ let last=performance.now();
 function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(.25,(now-last)/1000);last=now;
-  if(G&&G.phase==='play'&&!G.paused&&!G.over){
+  if(G&&G.phase==='play'&&!G.paused&&!G.over&&!MPH.on){
     acc+=dt*G.speed;let n=0;
     while(acc>=TICK&&n<16){step(TICK);acc-=TICK;n++}
     if(n>=16)acc=0;
@@ -2041,11 +2044,12 @@ function frame(now){
   refreshUI(false);
 }
 function newSeed(){return 1000+Math.floor(Math.random()*9000)}
-function togglePause(){if(!G||G.phase!=='play'||G.over)return;G.paused=!G.paused;note='';refreshUI(true)}
+function togglePause(){if(!G||MPH.on||G.phase!=='play'||G.over)return;G.paused=!G.paused;note='';refreshUI(true)}
 $('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab)});
 $('panes').addEventListener('click',e=>{
   const b=e.target.closest('[data-mode]');if(!b||b.disabled||!G)return;
   const id=b.dataset.mode;
+  if(MPH.on&&G.phase==='play'&&(id.startsWith('t:')||id.startsWith('k:')||id.startsWith('buy:'))){note='Not available in multiplayer yet.';refreshUI(true);return}
   if(id.startsWith('t:')){
     if(G.paused||G.phase!=='play'||G.over)note='Paused. Press Space to resume.';
     else note=id==='t:drive'?startDrive(0):allIn?recruitMany(P(),id.slice(2)):recruit(0,id.slice(2));
@@ -2057,7 +2061,7 @@ $('panes').addEventListener('click',e=>{
   setMode(mode===id?'attack':id);
 });
 $('pauseBtn').addEventListener('click',togglePause);
-$('speed').addEventListener('change',e=>{if(G)G.speed=Number(e.target.value)||1});
+$('speed').addEventListener('change',e=>{if(G&&!MPH.on)G.speed=Number(e.target.value)||1});
 $('diff').addEventListener('change',e=>{diff=e.target.value;note='AI set to '+e.target.selectedOptions[0].text+'.';renderStatus();refreshUI(true)});
 $('newBtn').addEventListener('click',()=>newGame(newSeed()));
 $('randomSpawn').addEventListener('click',randomSpawn);
@@ -2215,14 +2219,41 @@ if(window.__ITEST){
     declareWar,makePeace,propose,dipDo,setTreaty,endTreaty,giftTo,atWar,treatyOf,truceLeft,opinion,econ,goldRate,approvalTarget,approvalMult,issueBonds,repayBonds,genEvent,resolveEvent,aiOffer,revolt,diploTick,secondly,allyCount,warCount,rel:()=>REL,ev:()=>G.event,openDip,closeDip
   };
 }
-/* ---------- multiplayer hook (Stage 3): inert unless a room attaches handlers, so solo play is unchanged ---------- */
-const MPH={on:false,pick:null,random:null};
+/* ---------- multiplayer hook (Stages 3-4): inert unless a room attaches handlers, so solo play is unchanged ---------- */
 window.__SKY=Object.assign(window.__SKY||{},{
   MW,MH,NCOUNT,newGame,step,
+  fn:{launchAttack,tryBuild,upgradeBuilding,snapLand,atWar,declareWar,BUILD},   // server reuses the game's own rules
+  server(){MPH.srv=true},
+  start(ids){for(const id of ids){const n=G.nations[id];if(n&&n.alive)n.human=true}initRelations();G.phase='play';G.paused=false;G.speed=1},
+  setHuman(id,v){const n=G.nations[id];if(!n||id<1||(v&&!n.alive))return false;n.human=!!v;return true},
   state:()=>({seed:G.seed,terr,owner,scorch,orig,G,REL,cam}),
-  load(s){newGame(s.seed);terr.set(s.terr);owner.set(s.owner);scorch.set(s.scorch);orig.set(s.orig);G=s.G;for(const k in s.REL)REL[k]=s.REL[k];paintAll();layout();buildStandings();refreshUI(true)},
-  attach(h){MPH.on=true;MPH.pick=h.pick;MPH.random=h.random},
-  detach(regen){if(!MPH.on)return;MPH.on=false;MPH.pick=MPH.random=null;if(regen!==false)newGame(newSeed())},
+  load(s){
+    if(!(MPH.on&&G&&G.seed===s.seed))newGame(s.seed);          // same room world already built: skip the slow terrain rebuild
+    terr.set(s.terr);owner.set(s.owner);scorch.set(s.scorch);orig.set(s.orig);G=s.G;
+    G.bat=new Map(G.blds.map(b=>[b.i,b]));                     // restore identity between G.blds and G.bat
+    for(const k in s.REL)REL[k]=s.REL[k];
+    paintAll();layout();buildStandings();refreshUI(true);
+    if(G.over)showEnd();
+  },
+  applyDelta(d){
+    if(!G)return;
+    const was=G.phase;G.t=d.t;G.phase=d.phase;G.paused=d.paused;
+    if(was==='spawn'&&d.phase==='play'&&MPH.me>0){const n=G.nations[MPH.me];if(n)focusCam(n.cx,n.cy,5)}
+    if(d.tiles){const u=d.tiles,dv=new DataView(u.buffer||u,u.byteOffset||0,u.byteLength);for(let o=0;o+5<=dv.byteLength;o+=5){const i=dv.getUint32(o,true);owner[i]=dv.getInt8(o+4);paintAround(i)}}
+    for(const v of d.nat){const n=G.nations[v[0]];if(n){n.troops=v[1];n.gold=v[2];n.tiles=v[3];n.cx=v[4];n.cy=v[5];n.approval=v[6];n.unrest=v[7];n.debt=v[8]}}
+    for(const k in d.cold){const n=G.nations[k];if(n)Object.assign(n,d.cold[k])}
+    for(const [i,b] of d.blds){
+      const old=G.bat.get(i);if(old){G.blds=G.blds.filter(x=>x!==old);G.bat.delete(i)}
+      if(b){const nb={type:b.type,i,x:i%MW,y:(i/MW)|0,owner:b.owner,ready:b.ready||0,lv:b.lv};G.blds.push(nb);G.bat.set(i,nb)}
+    }
+    if(d.rel)for(const f in d.rel)for(const [k,v] of d.rel[f])REL[f][k]=v;
+    if(d.atk)G.attacks=d.atk.map(([atk,def,troops])=>({atk,def,troops,acc:0,front:null,rescan:0}));
+    if(d.over&&!G.over){G.over=d.over;showEnd()}
+    refreshUI(false);
+  },
+  attach(h){MPH.on=true;MPH.pick=h.pick;MPH.random=h.random;MPH.tap=h.tap||null},
+  detach(regen){if(!MPH.on)return;MPH.on=false;MPH.me=0;MPH.pick=MPH.random=MPH.tap=null;if(regen!==false)newGame(newSeed())},
+  setMe(id,force){if(MPH.me===id&&!force)return;MPH.me=id;if(!G)return;const n=G.nations[id];if(id>0&&n&&n.alive&&G.phase==='play')focusCam(n.cx,n.cy,5);refreshUI(true)},
   say(t){note=t;if(G)refreshUI(true)}
 });
 if(window.innerWidth<720){$('standings').hidden=true;$('stToggle').textContent='Show'}else stage.classList.add('st-open');
@@ -2276,6 +2307,7 @@ requestAnimationFrame(frame);
       <ul id="mpList"></ul>
       <p id="mpWorld"></p>
       <button class="btn pri" id="mpMakeWorld" hidden>Create World</button>
+      <button class="btn pri" id="mpStart" hidden>Start Game</button>
       <div style="height:8px"></div>
       <button class="btn" id="mpClose">Show map (stay in room)</button>
       <div style="height:8px"></div>
@@ -2289,7 +2321,7 @@ requestAnimationFrame(frame);
 (()=>{
 const $=id=>document.getElementById(id);
 const KEY='skyfrontMpSession',NKEY='skyfrontMpName';
-let sock=null,room=null,me=null,session=null,online=false,busy=false,loadedRev=0,loading=false;
+let sock=null,room=null,me=null,session=null,online=false,busy=false,loadedRev=0,loading=false,lastSeq=-1,pending=[];
 try{session=JSON.parse(sessionStorage.getItem(KEY)||'null')}catch(e){}
 try{$('mpName').value=localStorage.getItem(NKEY)||''}catch(e){}
 const qp=new URLSearchParams(location.search).get('room');
@@ -2324,7 +2356,10 @@ function render(){
     $('mpWorld').textContent=w.state==='none'?(host?'Everyone is in? Create the world to start choosing countries.':'Waiting for the host to create the world.')
       :w.state==='building'?'Generating the world… this can take up to a minute.'
       :w.state==='error'?(w.error||'World generation failed.')
-      :loadedRev===w.rev?'World ready (map #'+w.seed+'). Show the map and click a country to lead it. Gameplay is not shared yet.':'Loading the world…';
+      :loadedRev===w.rev?(w.started?'Game in progress (map #'+w.seed+'). Show the map and play. Attack and Build are shared; other actions are not available yet.'
+        :'World ready (map #'+w.seed+'). Click a country on the map to lead it'+(host?', then press Start Game.':'. The host starts the game.')):'Loading the world…';
+    $('mpStart').hidden=!(host&&w.state==='ready'&&!w.started&&loadedRev===w.rev);
+    $('mpStart').disabled=busy||!room.players.some(p=>p.nation!=null);
   }
   $('mpPill').textContent=inRoom?`Room ${room.code} · ${room.players.length}/${room.max}`:'Multiplayer';
   $('mpPill').hidden=!$('mpOv').hidden;
@@ -2342,13 +2377,41 @@ function attachMp(){
       sock.emit('claim-nation',{nation:id},res=>SKY().say(res&&res.success?'You lead '+(res.name||'your country')+'. Other players can see your choice.':(res&&res.message)||'Could not claim that country.'));
       return true;
     },
+    tap(mode,c,ratio){
+      if(loadedRev!==(room&&room.world.rev))return 'The world is still loading.';
+      if(!online)return 'Not connected to the server.';
+      if(!room.world.started)return 'The game has not started yet. The host presses Start Game.';
+      let action;
+      if(mode==='attack')action={type:'attack',tile:c.y*SKY().MW+c.x,ratio};
+      else if(mode.startsWith('b:'))action={type:'build',building:mode.slice(2),tile:c.y*SKY().MW+c.x};
+      else if(mode==='u:up')action={type:'upgrade',tile:c.y*SKY().MW+c.x};
+      else return 'Not available in multiplayer yet.';
+      sock.emit('game-action',{rid:Math.random().toString(36).slice(2,12)+Date.now().toString(36),action},res=>SKY().say((res&&res.message)||'No response from the server.'));
+      return 'Sending…';
+    },
     random(){
       if(loadedRev!==(room&&room.world.rev)){SKY().say('The world is still loading.');return}
       sock.emit('claim-random',{},res=>SKY().say(res&&res.success?'You lead '+res.name+'.':(res&&res.message)||'Could not claim a country.'));
     }
   });
 }
-function detachMp(){if(SKY()&&SKY().detach)SKY().detach(loadedRev!==0);loadedRev=0;loading=false}
+function feed(d){
+  if(d.seq<=lastSeq)return;
+  if(d.resync||d.seq!==lastSeq+1){resync();return}      // missed a delta (or too big): refetch the current snapshot
+  SKY().applyDelta(d);lastSeq=d.seq;
+}
+function onDelta(d){
+  if(!SKY()||!room||!session)return;
+  if(loading||loadedRev!==room.world.rev){pending.push(d);if(pending.length>300)pending.shift();return}
+  feed(d);
+}
+function resync(){loadedRev=0;pending=[];render();sync()}
+function syncMe(force){
+  if(!SKY()||!room||!session)return;
+  const m=room.players.find(p=>p.id===session.id);
+  SKY().setMe(m&&m.nation!=null?m.nation:0,force);
+}
+function detachMp(){if(SKY()&&SKY().detach)SKY().detach(loadedRev!==0);loadedRev=0;loading=false;lastSeq=-1;pending=[]}
 async function inflate(buf){const st=new Blob([buf]).stream().pipeThrough(new DecompressionStream('deflate'));return new Uint8Array(await new Response(st).arrayBuffer())}
 function dec(v){
   if(v===null||typeof v!=='object')return v;
@@ -2364,6 +2427,7 @@ async function applySnapshot(buf){
   const take=(T)=>{const a=new T(u.buffer.slice(o,o+N));o+=N;return a};
   const terr=take(Uint8Array),owner=take(Int8Array),scorch=take(Uint8Array),orig=take(Int8Array);
   SKY().load({seed:meta.seed,terr,owner,scorch,orig,G:dec(meta.G),REL:dec(meta.REL)});
+  return meta.seq|0;
 }
 function sync(){
   if(!sock||!online||!room||!session||room.world.state!=='ready'||room.world.rev===loadedRev||loading||!SKY())return;
@@ -2371,9 +2435,10 @@ function sync(){
   sock.emit('world-get',{},async res=>{
     try{
       if(!res||!res.success)throw new Error((res&&res.message)||'no response');
-      await applySnapshot(res.snapshot);loadedRev=res.rev;msg('');
+      lastSeq=await applySnapshot(res.snapshot);loadedRev=res.rev;msg('');syncMe(true);
     }catch(e){msg('Could not load the world: '+e.message,true)}
     loading=false;render();
+    if(loadedRev===res.rev){const q=pending.splice(0).sort((x,y)=>x.seq-y.seq);for(const d of q)feed(d)}
     if(room&&room.world.rev!==loadedRev&&loadedRev!==want)sync();
   });
 }
@@ -2391,6 +2456,7 @@ function name(){const n=$('mpName').value.trim();try{localStorage.setItem(NKEY,n
 $('mpSolo').onclick=()=>show(false);
 $('mpClose').onclick=()=>show(false);
 $('mpMakeWorld').onclick=()=>ask('create-world',{},res=>{if(!res.success)msg(res.message,true)});
+$('mpStart').onclick=()=>ask('start-game',{},res=>{if(!res.success)msg(res.message,true)});
 $('mpPill').onclick=()=>{msg('');show(true)};
 $('mpCreate').onclick=()=>ask('create-room',{name:name()},res=>res.success?enter(res):msg(res.message,true));
 $('mpJoin').onclick=()=>ask('join-room',{code:$('mpJoinCode').value,name:name()},res=>res.success?enter(res):msg(res.message,true));
@@ -2419,9 +2485,10 @@ if(typeof io==='undefined'){
     });
     render();
   });
-  sock.on('disconnect',()=>{online=false;setStatus('Connection lost. Reconnecting…');render()});
+  sock.on('disconnect',()=>{online=false;loadedRev=0;pending=[];setStatus('Connection lost. Reconnecting…');render()});
   sock.on('connect_error',()=>{online=false;setStatus('Connecting… the server may be waking up (can take up to a minute).');render()});
-  sock.on('room-update',r=>{if(session&&r.code===session.code){room=r;render();sync()}});
+  sock.on('room-update',r=>{if(session&&r.code===session.code){room=r;render();sync();syncMe()}});
+  sock.on('world-delta',onDelta);
   sock.on('kicked',m=>{session=null;room=null;save();detachMp();msg(m,true);show(true)});
 }
 render();
