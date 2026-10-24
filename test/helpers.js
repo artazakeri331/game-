@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, "..");
 
 function startServer(port, env = {}) {
   return new Promise((resolve, reject) => {
-    const p = spawn("node", ["server.js"], { cwd: ROOT, env: { ...process.env, PORT: String(port), GRACE_MS: "1500", MAX_WORLDS: "8", MAX_RUNNING_GAMES: "4", ...env } });
+    const p = spawn("node", ["server.js"], { cwd: ROOT, env: { ...process.env, PORT: String(port), GRACE_MS: "1500", SKYFRONT_TEST: "1", MAX_WORLDS: "8", MAX_RUNNING_GAMES: "4", ...env } });
     p.stderr.on("data", (d) => process.stderr.write(d));
     p.stdout.on("data", (d) => { if (String(d).includes("listening")) resolve(p); });
     p.on("error", reject);

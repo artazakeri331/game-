@@ -412,6 +412,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  if (process.env.SKYFRONT_TEST === "1") {                      // test-only hook (never enabled in production): wipe a nation's land
+    socket.on("test-wipe", async (a, b) => {
+      const [data, cb] = args(a, b);
+      const c = ctxOf(socket);
+      if (!c) return safeCallback(cb, { success: false });
+      await worldCall(c.room, "testWipe", { nation: data.nation });
+      safeCallback(cb, { success: true });
+    });
+  }
+
   socket.on("leave-room", (a, b) => {
     const [, cb] = args(a, b);
     detach(socket);

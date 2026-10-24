@@ -61,6 +61,9 @@ parentPort.on("message", (m) => {
       r = { success: sim.sky.setHuman(m.nation, m.human) };
     } else if (cmd === "action") {
       r = runAction(sim, m.nation, m.action);
+    } else if (cmd === "testWipe" && process.env.SKYFRONT_TEST === "1") {   // test-only: remove a nation's land so elimination/game-over can be exercised quickly
+      const { owner } = sim.state();
+      for (let i = 0; i < owner.length; i++) if (owner[i] === m.nation) owner[i] = -1;
     } else if (cmd === "pause") {
       paused = !!m.paused; last = now();
     } else if (cmd === "stats") {
