@@ -71,7 +71,7 @@ function decodeSnapshot(buf) {
   let o = 4 + L;
   const take = (T) => { const a = new T(u.buffer.slice(u.byteOffset + o, u.byteOffset + o + N)); o += N; return a; };
   const terr = take(Uint8Array), owner = take(Int8Array), scorch = take(Uint8Array), orig = take(Int8Array);
-  return { seed: meta.seed, seq: meta.seq, G: dec(meta.G), REL: dec(meta.REL), terr, owner, scorch, orig };
+  return { seed: meta.seed, seq: meta.seq, ev: meta.ev, G: dec(meta.G), REL: dec(meta.REL), terr, owner, scorch, orig };
 }
 async function snapshotOf(s) {
   const r = await ask(s, "world-get");
@@ -82,7 +82,9 @@ async function snapshotOf(s) {
 // A minimal client model that applies deltas exactly like the browser hook does (used to prove deltas are lossless).
 function model(snap) {
   const m = { seq: snap.seq, owner: Int8Array.from(snap.owner), blds: new Map(snap.G.blds.map((b) => [b.i, { type: b.type, owner: b.owner, lv: b.lv }])),
-    nat: snap.G.nations.map((n) => ({ troops: n.troops, gold: n.gold, tiles: n.tiles, human: n.human, alive: n.alive })), t: snap.G.t, phase: snap.G.phase, rel: { war: snap.REL.war.slice(), treaty: snap.REL.treaty.slice(), truce: snap.REL.truce.slice() } };
+    nat: snap.G.nations.map((n) => ({ troops: n.troops, gold: n.gold, tiles: n.tiles, human: n.human, alive: n.alive })), t: snap.G.t, phase: snap.G.phase, rel: { war: snap.REL.war.slice(), treaty: snap.REL.treaty.slice(), truce: snap.REL.truce.slice(), pact: snap.REL.pact.slice(), riv: snap.REL.riv.slice(), op: Int16Array.from(snap.REL.op, Math.round) },
+    offers: JSON.parse(JSON.stringify(snap.G.offers || [])), lastEv: snap.ev | 0, events: [], over: null,
+    proj: { m: new Map(snap.G.missiles.map((o) => [o._id, o])), b: new Map(snap.G.bombers.map((o) => [o._id, o])), s: new Map(snap.G.boats.map((o) => [o._id, o])) } };
   m.apply = (d) => {
     if (d.seq !== m.seq + 1) throw new Error(`delta gap: have ${m.seq}, got ${d.seq}`);
     m.seq = d.seq; m.t = d.t; m.phase = d.phase;
@@ -91,6 +93,10 @@ function model(snap) {
     for (const k in d.cold) Object.assign(m.nat[k], d.cold[k]);
     for (const [i, b] of d.blds) b ? m.blds.set(i, { type: b.type, owner: b.owner, lv: b.lv }) : m.blds.delete(i);
     if (d.rel) for (const f in d.rel) for (const [k, v] of d.rel[f]) m.rel[f][k] = v;
+    if (d.offers) m.offers = d.offers;
+    if (d.pr) for (const k in d.pr) { const e = d.pr[k]; for (const id of e.del || []) m.proj[k].delete(id); for (const o of e.up || []) m.proj[k].set(o._id, o); }
+    if (d.ev) for (const [id, t, text, cls] of d.ev) { if (id <= m.lastEv) continue; m.lastEv = id; m.events.push({ id, text, cls }); }
+    if (d.over) m.over = d.over;
   };
   return m;
 }

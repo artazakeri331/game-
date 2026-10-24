@@ -32,7 +32,7 @@ function loop() {
     acc -= TICK_MS; steps++; ticks++;
     const over = !!sim.state().G.over;
     if (over || ticks % BROADCAST_TICKS === 0) emitDelta();
-    if (over) { finished = true; break; }
+    if (over) { finished = true; parentPort.postMessage({ ev: "over" }); break; }
   }
   if (acc > TICK_MS * MAX_CATCHUP) acc = 0;                               // drop backlog
 }
@@ -46,12 +46,12 @@ parentPort.on("message", (m) => {
       sim.sky.server();
       tracker = makeTracker(sim);
       timer = setInterval(loop, 50);
-      r = { snapshot: host.snapshot(sim, seq), ids: host.eligibleIds(sim), names: host.names(sim), seed: sim.state().seed, seq };
+      r = { snapshot: host.snapshot(sim, seq, tracker.lastEv()), ids: host.eligibleIds(sim), names: host.names(sim), seed: sim.state().seed, seq };
     } else if (!sim) {
       throw new Error("World not initialised");
     } else if (cmd === "snapshot") {
       if (started && !finished) emitDelta();                              // flush so the snapshot sits exactly at `seq`
-      r = { snapshot: host.snapshot(sim, seq), seed: sim.state().seed, seq, started };
+      r = { snapshot: host.snapshot(sim, seq, tracker.lastEv()), seed: sim.state().seed, seq, started, over: finished };
     } else if (cmd === "start") {
       if (started) throw new Error("Already started");
       sim.sky.start(m.ids);

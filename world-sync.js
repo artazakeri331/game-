@@ -7,7 +7,7 @@ const HOT = ["troops", "gold", "tiles", "cx", "cy", "approval", "unrest", "debt"
 // Everything else the client UI reads. Whitelist (not "all scalars"): AI timers change every tick and would bloat deltas.
 const COLD = ["alive", "spawned", "human", "cnt", "lsum", "tax", "sats", "infamy", "home", "fighters", "bombers", "stock", "drive", "debtRate", "bonds", "noPort", "cc", "country"];
 const MAX_TILE_DELTA = 40000;          // beyond this (nuke-scale change) tell clients to refetch a snapshot instead
-const REL_FIELDS = ["war", "treaty", "truce"];
+const REL_FIELDS = ["war", "treaty", "truce", "pact", "riv"];
 const r1 = (x) => Math.round((Number(x) || 0) * 10) / 10;
 
 function coldOf(n) {
@@ -17,8 +17,20 @@ function coldOf(n) {
 }
 const bsig = (b) => `${b.type}|${b.owner}|${b.lv}|${Math.round(b.ready || 0)}`;
 
+// Projectile lists. Each object gets a stable `_id` the first time it is seen (it is also part of snapshots, so a client
+// that loads a snapshot and then applies deltas refers to the same objects). `sig` changes -> object is re-sent in full.
+const PROJ = { m: ["missiles", () => "1"], b: ["bombers", (o) => o.phase + "|" + o.t0], s: ["boats", () => "1"] };
+const MAX_EVENTS = 40;
+
 function makeTracker(sim) {
   const s0 = sim.state();
+  let nextId = 0, evId = 0;
+  const seen = new WeakSet([...s0.G.log, ...s0.G.news]);
+  const prevProj = { m: new Map(), b: new Map(), s: new Map() };
+  for (const k in PROJ) for (const o of s0.G[PROJ[k][0]]) { o._id = o._id || ++nextId; prevProj[k].set(o._id, PROJ[k][1](o)); }
+  let prevOffers = JSON.stringify(s0.G.offers || []);
+  const N = sim.sky.NCOUNT;
+  let prevOp = Int16Array.from(s0.REL.op, Math.round);
   let prevOwner = Int8Array.from(s0.owner);
   let prevBlds = new Map(s0.G.blds.map((b) => [b.i, bsig(b)]));
   let prevCold = s0.G.nations.map(coldOf);
@@ -83,10 +95,54 @@ function makeTracker(sim) {
     const atk = JSON.stringify(G.attacks.map((x) => [x.atk, x.def, Math.round(x.troops)]));
     if (atk !== prevAtk) { d.atk = JSON.parse(atk); prevAtk = atk; }
 
+    // offers between human players (small list; sent only when it changed)
+    const of = JSON.stringify(G.offers || []);
+    if (of !== prevOffers) { d.offers = JSON.parse(of); prevOffers = of; }
+
+    // opinions of/toward human nations (rounded, so slow drift costs almost nothing)
+    const op = [];
+    for (const h of G.nations) {
+      if (!h.human || !h.alive || h.id < 1) continue;
+      for (let o = 0; o < N; o++) {
+        for (const k of [h.id * N + o, o * N + h.id]) {
+          const v = Math.round(REL.op[k]);
+          if (v !== prevOp[k]) { prevOp[k] = v; op.push([k, v]); }
+        }
+      }
+    }
+    if (op.length) (d.rel || (d.rel = {})).op = op;
+
+    // projectiles: new/changed objects in full, removed ids, boat progress
+    const pr = {};
+    for (const key in PROJ) {
+      const [list, sg] = PROJ[key], prev = prevProj[key], cur = new Map(), up = [];
+      for (const o of G[list]) {
+        if (!o._id) o._id = ++nextId;
+        const g = sg(o);
+        cur.set(o._id, g);
+        if (prev.get(o._id) !== g) up.push(o);
+      }
+      const del = [];
+      for (const id of prev.keys()) if (!cur.has(id)) del.push(id);
+      prevProj[key] = cur;
+      const e = {};
+      if (up.length) e.up = up;
+      if (del.length) e.del = del;
+      if (key === "s" && G.boats.length) e.d = G.boats.map((b) => [b._id, r1(b.d)]);
+      if (Object.keys(e).length) pr[key] = e;
+    }
+    if (Object.keys(pr).length) d.pr = pr;
+
+    // events: new game news / log lines, each with a stable increasing id (clients drop ids they already have)
+    const ev = [];
+    for (let i = G.news.length - 1; i >= 0; i--) { const x = G.news[i]; if (!seen.has(x)) { seen.add(x); ev.push([++evId, r1(x.t), x.text, "news", 1]); } }
+    for (let i = G.log.length - 1; i >= 0; i--) { const x = G.log[i]; if (!seen.has(x)) { seen.add(x); ev.push([++evId, r1(G.t), x.text, x.cls || "", 0]); } }
+    if (ev.length) d.ev = ev.slice(-MAX_EVENTS);
+
     if (G.over) d.over = { winner: G.over.winner, why: G.over.why };
     return d;
   }
-  return { diff };
+  return { diff, lastEv: () => evId };
 }
 
 module.exports = { makeTracker, HOT, COLD, MAX_TILE_DELTA };

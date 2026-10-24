@@ -79,9 +79,9 @@ function enc(v) {
   return o;
 }
 
-function snapshot(sim, seq = 0) {
+function snapshot(sim, seq = 0, ev = 0) {
   const s = sim.state();
-  const meta = Buffer.from(JSON.stringify({ seed: s.seed, seq, G: enc(s.G), REL: enc(s.REL) }), "utf8");
+  const meta = Buffer.from(JSON.stringify({ seed: s.seed, seq, ev, G: enc(s.G), REL: enc(s.REL) }), "utf8");
   const head = Buffer.alloc(4); head.writeUInt32LE(meta.length);
   const arr = (a) => Buffer.from(a.buffer, a.byteOffset, a.byteLength);
   return zlib.deflateSync(Buffer.concat([head, meta, arr(s.terr), arr(s.owner), arr(s.scorch), arr(s.orig)]), { level: 6 });

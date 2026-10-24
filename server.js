@@ -65,7 +65,7 @@ function publicRoom(room) {
     code: room.code,
     max: MAX_PLAYERS_PER_ROOM,
     hostId: room.hostId,
-    world: { state: room.world.state, seed: room.world.seed, rev: room.world.rev, started: room.world.started, error: room.world.error || null },
+    world: { state: room.world.state, seed: room.world.seed, rev: room.world.rev, started: room.world.started, over: room.world.over, error: room.world.error || null },
     players: [...room.players.values()].map((p) => ({
       id: p.id, name: p.name, connected: p.connected, isHost: p.id === room.hostId,
       nation: p.nation === null ? null : p.nation, nationName: p.nation === null ? null : (room.world.names[p.nation] || null)
@@ -86,7 +86,7 @@ function ensureHost(room) {
 
 // ---------------- Shared world (Stage 3) ----------------
 function newWorld() {
-  return { state: "none", seed: 0, rev: 0, started: false, starting: false, paused: false, worker: null, ids: new Set(), names: [], error: null, pending: new Map(), seq: 0 };
+  return { state: "none", seed: 0, rev: 0, started: false, starting: false, over: false, paused: false, worker: null, ids: new Set(), names: [], error: null, pending: new Map(), seq: 0 };
 }
 function worldsInUse() {
   let n = 0;
@@ -125,6 +125,7 @@ function startWorld(room) {
       if (m.delta.tiles) m.delta.tiles = Buffer.from(m.delta.tiles);
       return io.to(room.code).emit("world-delta", m.delta);
     }
+    if (m.ev === "over") { w.over = true; broadcast(room); return; }   // finished games stop ticking and no longer count as running
     const p = w.pending.get(m.id);
     if (!p) return;
     w.pending.delete(m.id);
@@ -310,6 +311,24 @@ io.on("connection", (socket) => {
     broadcast(c.room);
   });
 
+  // After a game ends the host can reuse the room: the old world is discarded, claims are cleared, a fresh world is generated.
+  socket.on("new-world", (a, b) => {
+    const [, cb] = args(a, b);
+    const c = ctxOf(socket);
+    if (!c) return safeCallback(cb, { success: false, message: "Join a room first." });
+    const { room } = c;
+    if (room.hostId !== c.player.id) return safeCallback(cb, { success: false, message: "Only the host can start a new game." });
+    if (!room.world.over) return safeCallback(cb, { success: false, message: "The current game is not over." });
+    disposeWorld(room);
+    const rev = room.world.rev;
+    room.world = newWorld(); room.world.rev = rev;
+    room.claims.clear();
+    for (const p of room.players.values()) { p.nation = null; p.rids.clear(); }
+    startWorld(room);
+    safeCallback(cb, { success: true });
+    broadcast(room);
+  });
+
   socket.on("world-get", async (a, b) => {
     const [, cb] = args(a, b);
     const c = ctxOf(socket);
@@ -352,7 +371,7 @@ io.on("connection", (socket) => {
     if (w.state !== "ready") return safeCallback(cb, { success: false, message: "Create the world first." });
     if (w.started || w.starting) return safeCallback(cb, { success: false, message: "The game has already started." });
     if (!c.room.claims.size) return safeCallback(cb, { success: false, message: "At least one player must pick a country first." });
-    if ([...rooms.values()].filter((r) => r.world.started).length >= MAX_RUNNING_GAMES) return safeCallback(cb, { success: false, message: `The server is already running its maximum of ${MAX_RUNNING_GAMES} games. Try again later.` });
+    if ([...rooms.values()].filter((r) => r.world.started && !r.world.over).length >= MAX_RUNNING_GAMES) return safeCallback(cb, { success: false, message: `The server is already running its maximum of ${MAX_RUNNING_GAMES} games. Try again later.` });
     w.starting = true;
     try {
       await worldCall(c.room, "start", { ids: [...c.room.claims.keys()] });
@@ -387,7 +406,7 @@ io.on("connection", (socket) => {
     player.tokens -= 1;
     try {
       const r = await worldCall(room, "action", { nation: player.nation, action: data.action });
-      safeCallback(cb, { success: !!r.success, message: r.message });
+      safeCallback(cb, { success: !!r.success, message: r.message, code: r.code, target: r.target });
     } catch (e) {
       safeCallback(cb, { success: false, message: "The server could not process that action." });
     }
