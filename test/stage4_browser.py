@@ -100,7 +100,7 @@ try:
 
         # unsupported actions are blocked, never run locally
         B.click('[data-tab="troops"]'); B.click('[data-mode="t:small"]'); time.sleep(.3)
-        check("recruiting is blocked with a clear message (not run locally)", "Not available in multiplayer" in status(B), status(B)[:100])
+        check("recruiting goes to the server (Stage 5): answer is the server's, never run locally", "Not available in multiplayer" not in status(B) and len(status(B)) > 3, status(B)[:100])
         B.keyboard.press("p"); time.sleep(.3)
         B.evaluate("()=>{const b=document.querySelector('[data-dip]');if(b)b.click()}"); time.sleep(.3)
 

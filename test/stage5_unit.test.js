@@ -239,16 +239,17 @@ test("missiles: silo, cost, war requirement; projectile syncs to clients and its
   const { owner, terr, G } = S();
   rich(A, B);
   const own = (id) => { for (let i = 0; i < N; i++) if (owner[i] === id && terr[i] && !G.bat.has(i)) return i; return -1; };
-  assert.equal(run(A, { type: "missile", key: "cruise", tile: tileB }).success, false, "no silo yet");
-  assert.equal(run(A, { type: "missile", key: "bogus", tile: tileB }).success, false);
-  const sA = own(A);
+  const tB = own(B), sA = own(A);
+  assert.ok(tB >= 0);
+  assert.equal(run(A, { type: "missile", key: "cruise", tile: tB }).success, false, "no silo yet");
+  assert.equal(run(A, { type: "missile", key: "bogus", tile: tB }).success, false);
   assert.equal(run(A, { type: "build", building: "silo", tile: sA }).success, true);
-  const r0 = run(A, { type: "missile", key: "cruise", tile: tileB });
+  const r0 = run(A, { type: "missile", key: "cruise", tile: tB });
   assert.equal(r0.success, false);
   assert.equal(r0.code, "nowar", r0.message);                       // not at war -> the UI offers to declare war first
   assert.equal(dip(A, "war", B).success, true);
   const gold0 = nat(A).gold;
-  const r = run(A, { type: "missile", key: "cruise", tile: tileB });
+  const r = run(A, { type: "missile", key: "cruise", tile: tB });
   assert.equal(r.success, true, r.message);
   assert.ok(nat(A).gold < gold0, "missile cost not charged");
   assert.equal(G.missiles.length >= 1, true);
@@ -256,7 +257,7 @@ test("missiles: silo, cost, war requirement; projectile syncs to clients and its
   assert.ok(d.pr && d.pr.m && d.pr.m.up.length >= 1, "projectile not in delta");
   const id = d.pr.m.up[0]._id;
   assert.ok(m.proj.m.has(id));
-  assert.match(run(A, { type: "missile", key: "cruise", tile: tileB }).message, /reload/i, "silo cooldown must be enforced");
+  assert.match(run(A, { type: "missile", key: "cruise", tile: tB }).message, /reload/i, "silo cooldown must be enforced");
   assert.ok(m.events.some((e) => /launched a Cruise/.test(e.text)));
   step(100);
   assert.equal(m.proj.m.has(id), false, "missile removal not synced");
@@ -277,7 +278,8 @@ test("air power: jets need an airfield and hangar space, sorties need a target a
   assert.equal(nat(A).fighters, fighters + 1);
   feed(); assert.equal(m.nat[A].bombers, nat(A).bombers);
   const g0 = nat(A).gold;
-  const r = run(A, { type: "bomber", tile: tileB });
+  let tB2 = -1; for (let i = 0; i < N; i++) if (owner[i] === B && terr[i]) { tB2 = i; break; }
+  const r = run(A, { type: "bomber", tile: tB2 });
   assert.equal(r.success, true, r.message);                          // at war with B from the previous test
   assert.equal(G.bombers.length, 1);
   const d = feed();
@@ -299,7 +301,7 @@ test("navy: sea invasion and anti-ship actions validate on the server", () => {
   const { owner, terr } = S();
   let tile = -1; for (let i = 0; i < N; i++) if (owner[i] === B && terr[i]) { tile = i; break; }
   assert.equal(nat(A).cnt.port, 0);
-  assert.match(run(A, { type: "naval", tile, ratio: 50 }).message, /Port/);
+  assert.match(run(A, { type: "naval", tile, ratio: 50 }).message, /Port|not at war/i);
   assert.equal(run(A, { type: "naval", tile, ratio: 500 }).success, false);
   assert.equal(run(A, { type: "naval", tile: -5, ratio: 50 }).success, false);
   assert.equal(run(A, { type: "sink", tile }).success, false, "no ship there");

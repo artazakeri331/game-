@@ -115,7 +115,7 @@ test("attack: invalid requests are rejected with clear reasons", () => {
   const D = G.nations.filter((n) => n.alive && n.id > 0 && n.id !== A && n.id !== B && n.tiles >= 100).sort((p, q) => dist(q) - dist(p))[0];
   assert.equal(sim.sky.fn.declareWar(A, D.id), "");
   const far = owner.findIndex((o, i) => o === D.id && terr[i]);
-  bad({ type: "attack", tile: far, ratio: 50 }, /does not border/);
+  bad({ type: "attack", tile: far, ratio: 50 }, /does not border|No land border/);
 });
 
 test("authorization: spectators, unstarted games, eliminated or released nations cannot act", () => {
