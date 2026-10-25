@@ -59,7 +59,7 @@ reconnect) travel in the existing 500 ms deltas. Victory: land share, last natio
 "last surviving player"; a player who loses all land is eliminated and keeps watching as a spectator. After a game ends the host can
 press **New game** to build a fresh world in the same room.
 
-Not supported (documented, never faked): "All-in" mode and bulk recruit/build, manual pause and game speed, the single-player
+Not supported (documented, never faked): manual pause and game speed, the single-player
 president decisions / AI offers pop-ups, ally-call prompts to human allies, opinion values of AI nations are not synced (bars are
 approximate), and rooms are lost on a server restart.
 
@@ -107,6 +107,11 @@ What this means:
 - `MAX_RUNNING_GAMES` stays 1 and `MAX_WORLDS` 4 (4 worlds ~ 4 x 47 MB fits 512 MB; a second *running* game adds ~0.05-0.1 core).
 - Finished or abandoned worlds: freed when the room empties (seats expire after `GRACE_MS`) or after `WORLD_IDLE_MS`.
 
+## All-in mode and display smoothing
+- **All-in** works in multiplayer for build, upgrade and recruit. The request carries `all: true`; the server runs the game's own `buildMany` / `upgradeMany` / `recruitMany` for the player's nation (same validation and costs as single actions, gold never negative, bounded loops). Tests: `test/allin.test.js`, `test/smooth_browser.py`.
+- **Smoothness** is client-side and display-only. The server still sends one delta every 500 ms (`BROADCAST_TICKS` unchanged, so no extra CPU or bandwidth). In the browser, territory changes from each delta are drained over ~420 ms instead of painted in one batch, and troops/gold are extrapolated between deltas from their last rate. Every delta and snapshot still carries the exact values, so the display is corrected at each update. Between updates a number can differ slightly from the server's exact value; actions are always validated against the server's numbers.
+- The game clock, boats, missiles and bombers were already interpolated.
+
 ## Persistence (current behaviour and options)
 **Today (Option A, implemented by default):** rooms, claims, worlds and games exist only in server memory. A restart, crash of the whole process, redeploy or free-tier sleep deletes every room; clients see "Your seat has expired or the room no longer exists" and must create a new room. A crash of a single world's worker resets only that room.
 
@@ -120,7 +125,7 @@ What this means:
 - A world can fail to build or its worker can crash: the room shows an error, claims are cleared, the host presses **Create World** again.
 - A browser that loses the connection reconnects automatically within `GRACE_MS` and keeps its country; after that the country returns to the AI.
 - A client that misses updates re-downloads one snapshot (automatic); repeated resyncs usually mean the server CPU is saturated.
-- Not supported in multiplayer (see Stage 5 list): All-in mode, manual pause/speed, single-player president pop-ups, ally-call prompts, AI opinion values.
+- Not supported in multiplayer (see Stage 5 list): manual pause/speed, single-player president pop-ups, ally-call prompts, AI opinion values.
 - `README.txt` is the original starter note and is outdated; this file is current.
 
 ### Tests

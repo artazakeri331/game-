@@ -312,7 +312,7 @@ const MONO="'IBM Plex Mono',ui-monospace,Menlo,monospace";
 const reduced=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 let G=null,mode='attack',tab='attack',hover=null,note='',diff='normal',CW=0,CH=0,dirty=false,acc=0,auto=false;
-const MPH={on:false,srv:false,me:0,pick:null,random:null,tap:null,dip:null,cmd:null,respond:null,pn:()=>'',isHost:()=>false,rematch:null,leave:null,lastEv:0,tCap:0}; // multiplayer hooks: inert in solo play
+const MPH={on:false,srv:false,me:0,pick:null,random:null,tap:null,dip:null,cmd:null,respond:null,pn:()=>'',isHost:()=>false,rematch:null,leave:null,lastEv:0,tCap:0,tq:[],tqh:0,tqPer:0}; // multiplayer hooks: inert in solo play
 const cam={x:0,y:0,z:4,minZ:1,maxZ:40};
 let needFit=true;
 const terr=new Uint8Array(N),owner=new Int8Array(N),depth=new Uint8Array(N),vari=new Uint8Array(N),scorch=new Uint8Array(N);
@@ -1665,7 +1665,7 @@ function onTap(e){
   const c=tileFromEvent(e);if(!c)return;
   if(G.phase==='spawn'){trySpawn(c.x,c.y);refreshUI(true);return}
   if(G.over)return;
-  if(MPH.on){note=MPH.tap?MPH.tap(mode,c,Number($('ratio').value)):'';refreshUI(true);return}
+  if(MPH.on){note=MPH.tap?MPH.tap(mode,c,Number($('ratio').value),allIn):'';refreshUI(true);return}
   if(G.paused){note='Paused. Press Space to resume.';refreshUI(true);return}
   hideWarPrompt();
   const i=c.y*MW+c.x,p=P();let msg='';
@@ -1748,10 +1748,10 @@ function upgradeMany(n,i){
 }
 function recruitMany(n,key){
   const g0=n.gold,t0=n.troops;let k=0,msg='';
-  for(;k<60;k++){msg=recruit(0,key);if(msg)break}
+  for(;k<60;k++){msg=recruit(n.id,key);if(msg)break}
   return k?`All-in: recruited ${fmt(n.troops-t0)} troops for ${fmt(g0-n.gold)} gold.`:msg;
 }
-$('allIn').addEventListener('click',()=>{if(MPH.on){note='All-in is not available in multiplayer.';refreshUI(true);return}setAllIn(!allIn)});
+$('allIn').addEventListener('click',()=>setAllIn(!allIn));
 function setMode(m){mode=m;note='';updateOrders();renderStatus()}
 function tileFromEvent(e){
   const r=cv.getBoundingClientRect();
@@ -2147,9 +2147,11 @@ function frame(now){
     if(n>=16)acc=0;
   }
   if(MPH.on&&G&&G.phase==='play'&&!G.paused&&!G.over){
-    G.t=Math.min(G.t+dt,MPH.tCap);                                  // coast between 500 ms deltas; the next delta sets the exact value
+    const t0=G.t;G.t=Math.min(G.t+dt,MPH.tCap);                      // coast between 500 ms deltas; the next delta sets the exact value
+    if(G.t>t0)coast(dt,G.t-t0);
     for(const b of G.boats)b.d=Math.min(b.len,b.d+b.speed*dt);
   }
+  if(MPH.on&&G)drainTiles(dt);
   if(G&&keysDown.size){
     const sp=720/cam.z*dt;let dx=0,dy=0;
     if(keysDown.has('a')||keysDown.has('arrowleft'))dx--;
@@ -2169,7 +2171,7 @@ $('panes').addEventListener('click',e=>{
   const b=e.target.closest('[data-mode]');if(!b||b.disabled||!G)return;
   const id=b.dataset.mode;
   if(MPH.on&&G.phase==='play'&&(id.startsWith('t:')||id.startsWith('k:')||id.startsWith('buy:'))){
-    const act=id==='t:drive'?{type:'drive'}:id.startsWith('t:')?{type:'recruit',key:id.slice(2)}:id.startsWith('k:')?{type:'stock',key:id.slice(2)}:id==='buy:sat'?{type:'sat'}:{type:'jet',kind:id.slice(4)};
+    const act=id==='t:drive'?{type:'drive'}:id.startsWith('t:')?{type:'recruit',key:id.slice(2),all:allIn}:id.startsWith('k:')?{type:'stock',key:id.slice(2)}:id==='buy:sat'?{type:'sat'}:{type:'jet',kind:id.slice(4)};
     MPH.cmd(act);return}
   if(id.startsWith('t:')){
     if(G.paused||G.phase!=='play'||G.over)note='Paused. Press Space to resume.';
@@ -2372,9 +2374,42 @@ function applyEvents(evs){
     if(isNews){G.news.unshift({t,text});if(G.news.length>12)G.news.pop()}
   }
 }
+/* ---- multiplayer display smoothing (client only, display only; every delta/snapshot still carries the exact authoritative values) ----
+   Territory changes arrive in one batch per delta (every ~500 ms). Instead of painting them all at once, they are queued in random order and
+   drained over the next ~420 ms, so land changes hands continuously. Troops and gold are extrapolated between deltas from their last rate. */
+function flushTiles(){const q=MPH.tq;for(let k=MPH.tqh;k<q.length;k+=2){owner[q[k]]=q[k+1];paintAround(q[k])}q.length=0;MPH.tqh=0}
+function drainTiles(dt){
+  const q=MPH.tq;if(MPH.tqh>=q.length)return;
+  const end=Math.min(q.length,MPH.tqh+Math.max(1,Math.ceil(MPH.tqPer*dt))*2);
+  for(let k=MPH.tqh;k<end;k+=2){owner[q[k]]=q[k+1];paintAround(q[k])}
+  MPH.tqh=end;if(end>=q.length){q.length=0;MPH.tqh=0}
+}
+function queueTiles(u){
+  flushTiles();                                                   // anything still queued from the previous delta is applied first, in order
+  const dv=new DataView(u.buffer||u,u.byteOffset||0,u.byteLength),cnt=Math.floor(dv.byteLength/5),ord=new Array(cnt);
+  for(let k=0;k<cnt;k++)ord[k]=k;
+  for(let k=cnt-1;k>0;k--){const j=Math.floor(Math.random()*(k+1)),t=ord[k];ord[k]=ord[j];ord[j]=t}
+  const q=MPH.tq;for(const k of ord){q.push(dv.getUint32(k*5,true),dv.getInt8(k*5+4))}
+  MPH.tqPer=cnt/.42;
+}
+function coast(dt,adv){
+  for(const n of G.nations){
+    if(!n.alive)continue;
+    if(n._rt)n.troops=Math.max(0,n.troops+n._rt*adv);
+    if(n._rg)n.gold=Math.max(0,n.gold+n._rg*adv);
+  }
+}
+function setRate(n,v,dtv){                                       // rate from the last two authoritative samples, capped so one-off jumps (recruit, purchase) do not overshoot
+  if(n._at!==undefined&&dtv>.2&&dtv<2){
+    const cap=(x)=>Math.max(30,.06*Math.abs(x));
+    const rt=(v[1]-n._at)/dtv,rg=(v[2]-n._ag)/dtv;
+    n._rt=Math.max(-cap(v[1])*2,Math.min(cap(v[1])*2,rt));n._rg=Math.max(-cap(v[2])*2,Math.min(cap(v[2])*2,rg));
+  }
+  n._at=v[1];n._ag=v[2];
+}
 window.__SKY=Object.assign(window.__SKY||{},{
   MW,MH,NCOUNT,newGame,step,
-  fn:{launchAttack,tryBuild,upgradeBuilding,snapLand,atWar,declareWar,BUILD,launchNaval,launchMissile,issueBonds,repayBonds,endAttack,sortie,sinkShip,recruit,startDrive,buyJet,buySat,stockBuy,pushNews,MISSILES,RECRUIT,JET,TAX_MAX,dip:mpDip,respond:respondOffer},   // server reuses the game's own rules
+  fn:{buildMany,upgradeMany,recruitMany,launchAttack,tryBuild,upgradeBuilding,snapLand,atWar,declareWar,BUILD,launchNaval,launchMissile,issueBonds,repayBonds,endAttack,sortie,sinkShip,recruit,startDrive,buyJet,buySat,stockBuy,pushNews,MISSILES,RECRUIT,JET,TAX_MAX,dip:mpDip,respond:respondOffer},   // server reuses the game's own rules
   server(){MPH.srv=true},
   start(ids){G.mpIds=[];for(const id of ids){const n=G.nations[id];if(n&&n.alive){n.human=true;G.mpIds.push(id)}}G.offers=[];G.offerSeq=0;G.blocTs={};initRelations();G.phase='play';G.paused=false;G.speed=1},
   setHuman(id,v){
@@ -2384,6 +2419,7 @@ window.__SKY=Object.assign(window.__SKY||{},{
   state:()=>({seed:G.seed,terr,owner,scorch,orig,G,REL,cam}),
   load(s){
     if(!(MPH.on&&G&&G.seed===s.seed))newGame(s.seed);          // same room world already built: skip the slow terrain rebuild
+    MPH.tq.length=0;MPH.tqh=0;MPH.lastT=undefined;               // a snapshot supersedes queued display changes
     terr.set(s.terr);owner.set(s.owner);scorch.set(s.scorch);orig.set(s.orig);G=s.G;
     G.bat=new Map(G.blds.map(b=>[b.i,b]));                     // restore identity between G.blds and G.bat
     for(const k in s.REL)REL[k]=s.REL[k];
@@ -2395,8 +2431,9 @@ window.__SKY=Object.assign(window.__SKY||{},{
     if(!G)return;
     const was=G.phase;G.t=d.t;MPH.tCap=d.t+.7;G.phase=d.phase;G.paused=d.paused;
     if(was==='spawn'&&d.phase==='play'&&MPH.me>0){const n=G.nations[MPH.me];if(n)focusCam(n.cx,n.cy,5)}
-    if(d.tiles){const u=d.tiles,dv=new DataView(u.buffer||u,u.byteOffset||0,u.byteLength);for(let o=0;o+5<=dv.byteLength;o+=5){const i=dv.getUint32(o,true);owner[i]=dv.getInt8(o+4);paintAround(i)}}
-    for(const v of d.nat){const n=G.nations[v[0]];if(n){n.troops=v[1];n.gold=v[2];n.tiles=v[3];n.cx=v[4];n.cy=v[5];n.approval=v[6];n.unrest=v[7];n.debt=v[8]}}
+    if(d.tiles)queueTiles(d.tiles);else flushTiles();
+    const dtv=d.t-(MPH.lastT===undefined?-9:MPH.lastT);MPH.lastT=d.t;
+    for(const v of d.nat){const n=G.nations[v[0]];if(n){setRate(n,v,dtv);n.troops=v[1];n.gold=v[2];n.tiles=v[3];n.cx=v[4];n.cy=v[5];n.approval=v[6];n.unrest=v[7];n.debt=v[8]}}
     for(const k in d.cold){const n=G.nations[k];if(n)Object.assign(n,d.cold[k])}
     for(const [i,b] of d.blds){
       const old=G.bat.get(i);if(old){G.blds=G.blds.filter(x=>x!==old);G.bat.delete(i)}
@@ -2408,11 +2445,11 @@ window.__SKY=Object.assign(window.__SKY||{},{
     if(d.pr)applyProj(d.pr);
     if(d.ev)applyEvents(d.ev);
     if(G.fx.length)G.fx=G.fx.filter(f=>G.t-f.t0<f.dur+.5);
-    if(d.over&&!G.over){G.over=d.over;showEnd()}
+    if(d.over&&!G.over){G.over=d.over;flushTiles();showEnd()}
     refreshUI(false);
   },
   attach(h){MPH.on=true;MPH.pick=h.pick;MPH.random=h.random;MPH.tap=h.tap||null;MPH.dip=h.dip||null;MPH.cmd=h.cmd||null;MPH.respond=h.respond||null;MPH.pn=h.pn||(()=>'');MPH.isHost=h.isHost||(()=>false);MPH.rematch=h.rematch||null;MPH.leave=h.leave||null},
-  detach(regen){if(!MPH.on)return;MPH.on=false;MPH.me=0;MPH.pick=MPH.random=MPH.tap=MPH.dip=MPH.cmd=MPH.respond=MPH.rematch=MPH.leave=null;MPH.pn=()=>'';MPH.isHost=()=>false;if(regen!==false)newGame(newSeed())},
+  detach(regen){if(!MPH.on)return;MPH.on=false;MPH.tq.length=0;MPH.tqh=0;MPH.lastT=undefined;MPH.me=0;MPH.pick=MPH.random=MPH.tap=MPH.dip=MPH.cmd=MPH.respond=MPH.rematch=MPH.leave=null;MPH.pn=()=>'';MPH.isHost=()=>false;if(regen!==false)newGame(newSeed())},
   setMe(id,force){if(MPH.me===id&&!force)return;MPH.me=id;if(!G)return;const n=G.nations[id];if(id>0&&n&&n.alive&&G.phase==='play')focusCam(n.cx,n.cy,5);refreshUI(true)},
   say(t){note=t;if(dipOpen)$('dipMsg').textContent=t;if(G)refreshUI(true)},
   warPrompt(id,go){showWarPrompt(id,go)}
@@ -2549,12 +2586,12 @@ function attachMp(){
       sock.emit('claim-nation',{nation:id},res=>SKY().say(res&&res.success?'You lead '+(res.name||'your country')+'. Other players can see your choice.':(res&&res.message)||'Could not claim that country.'));
       return true;
     },
-    tap(mode,c,ratio){
+    tap(mode,c,ratio,all){
       const t=c.y*SKY().MW+c.x;
       let action;
       if(mode==='attack')action={type:'attack',tile:t,ratio};
-      else if(mode.startsWith('b:'))action={type:'build',building:mode.slice(2),tile:t};
-      else if(mode==='u:up')action={type:'upgrade',tile:t};
+      else if(mode.startsWith('b:'))action={type:'build',building:mode.slice(2),tile:t,all:!!all};
+      else if(mode==='u:up')action={type:'upgrade',tile:t,all:!!all};
       else if(mode==='n:land')action={type:'naval',tile:t,ratio};
       else if(mode==='n:sink')action={type:'sink',tile:t};
       else if(mode.startsWith('m:'))action={type:'missile',key:mode.slice(2),tile:t};

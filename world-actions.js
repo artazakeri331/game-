@@ -55,10 +55,12 @@ function runAction(sim, nid, a) {
     case "build": {
       if (tile < 0) return fail("Invalid tile.");
       if (typeof a.building !== "string" || !Object.prototype.hasOwnProperty.call(f.BUILD, a.building)) return fail("Unknown building.");
+      if (a.all === true) { const msg = f.buildMany(n, a.building, tile); return /^All-in: built/.test(msg) ? ok(msg) : fail(msg); }   // the game's own All-in loop (bounded: <120 builds)
       return done(f.tryBuild(n, a.building, tile), `${f.BUILD[a.building].name} built.`);
     }
     case "upgrade": {
       if (tile < 0) return fail("Invalid tile.");
+      if (a.all === true) { const msg = f.upgradeMany(n, tile); return msg === "" ? ok("Building upgraded.") : /^All-in:/.test(msg) ? ok(msg) : fail(msg); }
       return done(f.upgradeBuilding(n, tile), "Building upgraded.");
     }
     case "naval": {                                               // sail troops to a coast (Navy tab)
@@ -92,6 +94,7 @@ function runAction(sim, nid, a) {
     }
     case "recruit": {
       if (typeof a.key !== "string" || !Object.prototype.hasOwnProperty.call(f.RECRUIT, a.key)) return fail("Unknown recruit order.");
+      if (a.all === true) { const msg = f.recruitMany(n, a.key); return /^All-in:/.test(msg) ? ok(msg) : fail(msg); }
       const t0 = n.troops;
       const msg = f.recruit(nid, a.key);
       return done(msg, `Recruited ${fmt(n.troops - t0)} troops.`);
