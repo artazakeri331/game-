@@ -150,6 +150,7 @@ function startWorld(room) {
   worldCall(room, "init", { seed: w.seed }).then((m) => {
     if (w.worker !== worker) return;
     w.ids = new Set(m.ids); w.names = m.names; w.state = "ready";
+    touch(room);                                                // the idle clock starts when the world is ready, not when its (possibly slow) build began
     console.log(`Room ${room.code} world ready (seed ${w.seed})`);
     broadcast(room);
   }, (e) => fail(e.message));
