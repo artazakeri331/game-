@@ -70,11 +70,13 @@ try:
         t1 = A.evaluate(STATE)["t"]; time.sleep(2.2); t2 = A.evaluate(STATE)["t"]
         check("world time advances with the server's updates (about 2 game-seconds in 2.2 s)", 1.0 <= t2 - t1 <= 3.5, f"{t1}->{t2}")
         ok = False
+        # Stage 6 smoothing extrapolates troops between 500 ms updates, so two clients are no longer bit-identical at one instant.
+        # They must still agree closely (both follow the same server values; neither runs its own simulation).
         for _ in range(40):
             sa, sb = A.evaluate("()=>({t:window.__SKY.state().G.t,tr:window.__SKY.state().G.nations.map(n=>Math.round(n.troops))})"), B.evaluate("()=>({t:window.__SKY.state().G.t,tr:window.__SKY.state().G.nations.map(n=>Math.round(n.troops))})")
-            if sa["t"] == sb["t"]: ok = sa["tr"] == sb["tr"]; break
+            if abs(sa["t"] - sb["t"]) < 0.3: ok = all(abs(x - y) <= max(60, 0.05 * max(x, y)) for x, y in zip(sa["tr"], sb["tr"])); break
             time.sleep(.1)
-        check("both clients show identical troop numbers at the same server time (no local simulation)", ok)
+        check("both clients show the same troop numbers within smoothing tolerance (no local simulation)", ok)
         A.keyboard.press("Space"); time.sleep(.3)
         check("Space does not pause a shared game", not A.evaluate(STATE)["paused"])
 

@@ -136,6 +136,7 @@ python3 test/stage2_lobby.py http://localhost:3111/   # start: PORT=3111 GRACE_M
 python3 test/stage3_browser.py             # starts its own server
 python3 test/stage4_browser.py             # starts its own server
 python3 test/stage5_browser.py             # starts its own server (sets SKYFRONT_TEST=1, a test-only hook)
+python3 test/smooth_browser.py             # All-in mode and display smoothing, starts its own server
 ```
 Browser tests need Playwright with Chromium (`pip install playwright`).
 Long or custom soak (local only, never point it at a hosted service):
