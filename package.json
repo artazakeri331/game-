@@ -2,6 +2,7 @@
   "name": "skyfront-multiplayer",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=18" },
   "description": "Starter Node.js and Socket.IO server for Skyfront",
   "main": "server.js",
   "scripts": {

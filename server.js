@@ -39,6 +39,8 @@ const MAX_WORLDS = Number(process.env.MAX_WORLDS) || 4;   // simulated worlds at
 const MAX_RUNNING_GAMES = Number(process.env.MAX_RUNNING_GAMES) || 1;   // games ticking at once: one running sim costs ~170 ms CPU/s, more than a free Render instance (~0.1 vCPU) has; raise on paid plans
 const ACTION_BURST = 10, ACTION_PER_SEC = 5;                              // per-player action rate limit
 const GRACE_MS = Number(process.env.GRACE_MS) || 60 * 1000;        // seat is held this long after a disconnect
+const WORLD_IDLE_MS = Number(process.env.WORLD_IDLE_MS) || 15 * 60 * 1000;   // an unstarted or finished world nobody touched for this long is discarded to free memory
+const REAPER_MS = Number(process.env.REAPER_MS) || 60 * 1000;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_RE = /^[A-Z2-9]{5}$/;
 
@@ -72,6 +74,10 @@ function publicRoom(room) {
     }))
   };
 }
+
+// Counters for the optional stats log. Rejections are counted (and rate-limit hits logged at most every 10 s per player), never logged with tokens or payloads.
+const metrics = { actions: 0, rejected: 0, rateLimited: 0, duplicates: 0, errors: 0 };
+const touch = (room) => { room.lastActive = Date.now(); };
 
 function broadcast(room) {
   io.to(room.code).emit("room-update", publicRoom(room));
@@ -117,8 +123,16 @@ function startWorld(room) {
   const fail = (msg) => {
     if (w.worker !== worker) return;
     console.error(`Room ${room.code} world failed:`, msg);
+    const wasStarted = w.started;
     disposeWorld(room);
-    w.state = "error"; w.error = "World generation failed. Try again."; broadcast(room);
+    w.state = "error"; w.ids = new Set();
+    if (wasStarted) {                                           // a crashed running game cannot be recovered (state is in memory only): reset the room for a new one
+      w.error = "The game server hit an error and this game was lost. The host can create a new world.";
+      w.started = false; w.over = false; w.starting = false; w.paused = false;
+      room.claims.clear();
+      for (const p of room.players.values()) { p.nation = null; p.rids.clear(); }
+    } else w.error = "World generation failed. Try again.";
+    broadcast(room);
   };
   worker.on("message", (m) => {
     if (m.ev === "delta") {                                   // streamed by the sim; forwarded to this room only
@@ -131,7 +145,7 @@ function startWorld(room) {
     w.pending.delete(m.id);
     m.ok ? p.resolve(m) : p.reject(new Error(m.error));
   });
-  worker.on("error", (e) => fail(e.message));
+  worker.on("error", (e) => fail(e && e.message ? e.message : "worker error"));
   worker.on("exit", () => fail("worker exited"));
   worldCall(room, "init", { seed: w.seed }).then((m) => {
     if (w.worker !== worker) return;
@@ -158,6 +172,7 @@ function releaseClaim(room, player) {
 function ctxOf(socket) {
   const room = rooms.get(socket.data.roomCode);
   const player = room && room.players.get(socket.data.playerId);
+  if (player) touch(room);                                     // any request from a room member counts as activity (idle-world reaper)
   return player ? { room, player } : null;
 }
 async function claimNation(room, player, id) {
@@ -207,6 +222,7 @@ function attach(socket, room, player) {
   clearTimeout(player.timer);
   player.socketId = socket.id;
   player.connected = true;
+  touch(room);
   socket.join(room.code);
   socket.data.roomCode = room.code;
   socket.data.playerId = player.id;
@@ -306,6 +322,7 @@ io.on("connection", (socket) => {
     if (c.room.hostId !== c.player.id) return safeCallback(cb, { success: false, message: "Only the host can create the world." });
     if (c.room.world.state === "building" || c.room.world.state === "ready") return safeCallback(cb, { success: false, message: "The world already exists." });
     if (worldsInUse() >= MAX_WORLDS) return safeCallback(cb, { success: false, message: `The server is running its maximum of ${MAX_WORLDS} active games. Try again later.` });
+    touch(c.room);
     startWorld(c.room);
     safeCallback(cb, { success: true });
     broadcast(c.room);
@@ -395,24 +412,38 @@ io.on("connection", (socket) => {
     if (player.nation === null) return safeCallback(cb, { success: false, message: "Pick a country first." });
     const rid = typeof data.rid === "string" && data.rid.length <= 40 ? data.rid : null;
     if (rid) {
-      if (player.rids.has(rid)) return safeCallback(cb, { success: false, duplicate: true, message: "Duplicate request ignored." });
+      if (player.rids.has(rid)) { metrics.duplicates++; return safeCallback(cb, { success: false, duplicate: true, message: "Duplicate request ignored." }); }
       player.rids.add(rid);
       if (player.rids.size > 200) player.rids.delete(player.rids.values().next().value);
     }
     const t = Date.now();
     player.tokens = Math.min(ACTION_BURST, player.tokens + ((t - player.tokenAt) / 1000) * ACTION_PER_SEC);
     player.tokenAt = t;
-    if (player.tokens < 1) return safeCallback(cb, { success: false, message: "Too many actions. Slow down." });
+    if (player.tokens < 1) {
+      metrics.rateLimited++;
+      if (t - (player.warnAt || 0) > 10000) { player.warnAt = t; console.warn(`Rate limit hit: room ${room.code} player ${player.id}`); }
+      return safeCallback(cb, { success: false, message: "Too many actions. Slow down." });
+    }
+    metrics.actions++;
     player.tokens -= 1;
+    touch(room);
     try {
       const r = await worldCall(room, "action", { nation: player.nation, action: data.action });
+      if (!r.success) metrics.rejected++;
       safeCallback(cb, { success: !!r.success, message: r.message, code: r.code, target: r.target });
     } catch (e) {
+      metrics.errors++; console.error(`Action failed in room ${room.code}:`, e && e.message ? e.message : e);
       safeCallback(cb, { success: false, message: "The server could not process that action." });
     }
   });
 
-  if (process.env.SKYFRONT_TEST === "1") {                      // test-only hook (never enabled in production): wipe a nation's land
+  if (process.env.SKYFRONT_TEST === "1") {                      // test-only hooks (never enabled in production): wipe a nation's land / crash a world worker
+    socket.on("test-crash", (a, b) => {
+      const [, cb] = args(a, b);
+      const c = ctxOf(socket);
+      if (c && c.room.world.worker) c.room.world.worker.postMessage({ cmd: "testCrash" });
+      safeCallback(cb, { success: !!c });
+    });
     socket.on("test-wipe", async (a, b) => {
       const [data, cb] = args(a, b);
       const c = ctxOf(socket);
@@ -442,8 +473,51 @@ io.on("connection", (socket) => {
   });
 });
 
+// Free memory held by worlds nobody is using: unstarted or finished worlds idle for WORLD_IDLE_MS. Running games are never reaped here
+// (a room with no connected player is paused, and its seats expire after GRACE_MS).
+setInterval(() => {
+  const t = Date.now();
+  for (const room of rooms.values()) {
+    const w = room.world;
+    if (!w.worker || w.state === "building" || (w.started && !w.over) || t - (room.lastActive || 0) < WORLD_IDLE_MS) continue;
+    console.log(`Room ${room.code}: discarding idle ${w.over ? "finished" : "unstarted"} world`);
+    disposeWorld(room);
+    const rev = w.rev;
+    room.world = newWorld(); room.world.rev = rev + 1;
+    room.claims.clear();
+    for (const p of room.players.values()) { p.nation = null; p.rids.clear(); }
+    broadcast(room);
+  }
+}, REAPER_MS).unref();
+
+// Optional measurement log (off by default): STATS_LOG_MS=30000 prints one line per interval with process memory and per-world worker stats.
+const STATS_LOG_MS = Number(process.env.STATS_LOG_MS) || 0;
+if (STATS_LOG_MS > 0) {
+  setInterval(async () => {
+    const out = [];
+    for (const r of rooms.values()) {
+      if (!r.world.worker) continue;
+      try { out.push({ room: r.code, players: r.players.size, started: r.world.started, over: r.world.over, ...(await worldCall(r, "stats")), id: undefined, ok: undefined }); } catch (e) { /* world is going away */ }
+    }
+    const mu = process.memoryUsage();
+    console.log("[stats] " + JSON.stringify({ metrics, rooms: rooms.size, rssMB: Math.round(mu.rss / 1e6), heapMB: Math.round(mu.heapUsed / 1e6), worlds: out }));
+  }, STATS_LOG_MS).unref();
+}
+
 const PORT = process.env.PORT || 3000;
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Skyfront server listening on port ${PORT}`);
 });
+
+// Render sends SIGTERM on redeploy/restart: stop the worker threads and close connections instead of being killed mid-write.
+function shutdown(sig) {
+  console.log(`${sig} received: shutting down (rooms in memory are lost)`);
+  for (const room of rooms.values()) disposeWorld(room);
+  io.close();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("unhandledRejection", (e) => console.error("Unhandled rejection:", e && e.message ? e.message : e));
