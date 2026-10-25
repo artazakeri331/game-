@@ -115,7 +115,7 @@ test("disconnect and reconnect during combat: country, war and running attack su
   assert.equal(b2.last.players.find((p) => p.id === b.pid).nation, b.nat, "country kept");
   assert.equal(snap.G.nations[b.nat].human, true);
   assert.equal(snap.REL.war[a.nat * (snap.REL.war.length ** 0.5 | 0) + b.nat], 1, "war still on");
-  await until(() => b2.deltas.length >= 2, 6000, "stream after rejoin");
+  await until(() => b2.deltas.some((d) => d.seq > snap.reply.seq), 6000, "a delta newer than the snapshot");
   assert.ok(b2.deltas.filter((d) => d.seq > snap.reply.seq).length >= 1);
   b2.deltas.filter((d) => d.seq > snap.reply.seq).reduce((prev, d) => { assert.equal(d.seq, prev + 1, "no gap after snapshot"); return d.seq; }, snap.reply.seq);
   const late = await H.joinRoom(url, g.host.code, "Late");
