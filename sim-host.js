@@ -60,7 +60,9 @@ function createSim(seed) {
     addEventListener() {}, activeElement: null
   };
   const context = vm.createContext(win);
-  vm.runInContext(gameSource(), context, { filename: "Skyfront-game.js", timeout: 30000 });
+  // Building the world costs ~6 CPU-seconds. The vm timeout is wall-clock time, so on a throttled host (Render free tier, ~0.1 vCPU) it must be generous:
+  // a 30 s limit made world creation fail there. WORLD_BUILD_TIMEOUT_MS overrides the 5-minute default.
+  vm.runInContext(gameSource(), context, { filename: "Skyfront-game.js", timeout: Number(process.env.WORLD_BUILD_TIMEOUT_MS) || 300000 });
   const sky = win.__SKY;
   if (!sky) throw new Error("Game hook (__SKY) missing");
   return { sky, state: () => sky.state() };

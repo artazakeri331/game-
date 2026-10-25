@@ -224,3 +224,10 @@ test("SIGTERM (Render redeploy) shuts the server down cleanly with exit code 0",
   assert.notEqual(r, "hung", "server did not exit after SIGTERM");
   assert.equal(r.code, 0); assert.ok(Date.now() - t < 5000);
 });
+
+test("world build timeout is generous by default and configurable (a 30 s wall-clock limit broke world creation on a throttled 0.1 vCPU host)", async () => {
+  const { spawnSync } = require("node:child_process");
+  const run = (env) => spawnSync("node", ["-e", "try{require('./sim-host').createSim(1234);console.log('built')}catch(e){console.log('ERR '+e.message)}"], { cwd: require("node:path").join(__dirname, ".."), env: { ...process.env, ...env }, encoding: "utf8", timeout: 120000 });
+  assert.match(run({ WORLD_BUILD_TIMEOUT_MS: "50" }).stdout, /ERR .*timed out/, "the knob is honoured");
+  assert.match(run({}).stdout, /built/, "default allows a normal build");
+});

@@ -33,6 +33,7 @@ All are optional. Defaults are the values the Stage 2-5 tests and measurements u
 | `WORLD_IDLE_MS` | 900000 | an unstarted or finished world nobody touched for this long is discarded (frees ~50 MB). Running games are never reaped. |
 | `REAPER_MS` | 60000 | how often the idle check runs |
 | `STATS_LOG_MS` | 0 (off) | if set, prints a `[stats]` JSON line at this interval: memory, action counters, per-world tick time, worker busy share, delta counts/bytes |
+| `WORLD_BUILD_TIMEOUT_MS` | 300000 | wall-clock limit for building one world (it takes ~65 s on a 0.1 vCPU host) |
 | `SKYFRONT_TEST` | unset | **tests only.** Enables the `test-wipe` / `test-crash` socket hooks. Never set it on a hosted service. |
 
 Hard-coded: `MAX_ROOMS` 25, 8 players per room, action rate limit burst 10 / 5 per second per player.
@@ -115,6 +116,7 @@ What this means:
 
 ## Known issues and recovery
 - Free-tier sleep or redeploy erases rooms: create a new room; nothing to repair on the server.
+- **"World generation failed" on a slow host (fixed):** building a world needs ~6 CPU-seconds. On a ~0.1 vCPU host that is ~65 s of wall time, and the old fixed 30 s limit aborted it. The limit is now 5 minutes (`WORLD_BUILD_TIMEOUT_MS`). Reproduced by throttling the server to 10% CPU: failed at 30 s before the fix, ready after 65 s with it (create world, claim and start all worked).
 - A world can fail to build or its worker can crash: the room shows an error, claims are cleared, the host presses **Create World** again.
 - A browser that loses the connection reconnects automatically within `GRACE_MS` and keeps its country; after that the country returns to the AI.
 - A client that misses updates re-downloads one snapshot (automatic); repeated resyncs usually mean the server CPU is saturated.

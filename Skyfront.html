@@ -2515,7 +2515,7 @@ function render(){
     const w=room.world,host=session&&room.hostId===session.id;
     $('mpMakeWorld').hidden=!(host&&(w.state==='none'||w.state==='error'));$('mpMakeWorld').disabled=busy;
     $('mpWorld').textContent=w.state==='none'?(host?'Everyone is in? Create the world to start choosing countries.':'Waiting for the host to create the world.')
-      :w.state==='building'?'Generating the world… this can take up to a minute.'
+      :w.state==='building'?'Generating the world… this takes up to a minute, longer on a slow or busy server.'
       :w.state==='error'?(w.error||'World generation failed.')
       :loadedRev===w.rev?(w.started?''+(w.over?'Game over (map #'+w.seed+').':'Game in progress (map #'+w.seed+'). Close this panel and play: attacks, building, recruiting, missiles, aircraft, navy, tax, diplomacy and offers are all shared.')
         :'World ready (map #'+w.seed+'). Click a country on the map to lead it'+(host?', then press Start Game.':'. The host starts the game.')):'Loading the world…';
